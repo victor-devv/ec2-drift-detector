@@ -1,0 +1,8 @@
+.idea
+.vscode
+pgdata
+.envrc
+__debug*
+volume
+.terraform
+terraform.tfstate*
