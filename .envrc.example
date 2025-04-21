@@ -1,0 +1,11 @@
+export PROJECT_ROOT=$(pwd)
+export SERVER_HOST=localhost
+export SERVER_PORT=4000
+
+export AWS_ACCESS_KEY_ID=dummy
+export AWS_SECRET_ACCESS_KEY=dummy
+export AWS_DEFAULT_REGION=eu-north-1
+
+export TF_VAR_aws_access_key_id=${AWS_ACCESS_KEY_ID}
+export TF_VAR_aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}
+export TF_VAR_aws_default_region=${AWS_DEFAULT_REGION}
