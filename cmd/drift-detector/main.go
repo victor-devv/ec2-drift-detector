@@ -9,7 +9,6 @@ import (
 	"syscall"
 
 	"github.com/sirupsen/logrus"
-	"github.com/victor-devv/ec2-drift-detector/internal/cli"
 	"github.com/victor-devv/ec2-drift-detector/internal/config"
 )
 
