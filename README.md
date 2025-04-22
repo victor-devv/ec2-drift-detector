@@ -268,17 +268,35 @@ This is an example of how an EC2 instance might look in the internal model after
 | `/pkg/utils/`      | Miscellaneous utilities (file helpers, etc.) |
 
 ## 🧱 Architecture Diagram (Logical)
-```mermaid
-flowchart TD
-    A[CLI (cmd)] --> B[Terraform Parser<br/>(internal/terraform)]
-    A --> C[AWS EC2 Client<br/>(internal/aws)]
-    A --> D[Drift Detector<br/>(internal/detector)]
-    
-    B --> D
-    C --> D
-    
-    D --> E[Reporter<br/>(internal/reporter)]
+
 ```
+                 +--------------------+
+                 |      CLI (cmd)     |
+                 +--------------------+
+                           |
+      +--------------------+---------------------+
+      |                    |                     |
+      v                    v                     v
++---------------+  +----------------+   +--------------------+
+| Terraform     |  | AWS EC2 Client |   |  Drift Detector    |
+| Parser        |  | (internal/aws) |   |  (internal/detector)|
+| (terraform/)  |  +----------------+   +--------------------+
++---------------+           |                    |
+                            +--------------------+
+                                      |
+                             +-------------------+
+                             |     Reporter      |
+                             | (internal/reporter)|
+                             +-------------------+
+```
+
+## 🔍 Description
+
+- **CLI (cmd/)**: Entry point that parses arguments and triggers drift detection.
+- **Terraform Parser**: Parses `.tfstate` or `.tf` HCL files into internal models.
+- **AWS EC2 Client**: Fetches real-time EC2 configurations from AWS.
+- **Drift Detector**: Compares Terraform vs AWS instance data.
+- **Reporter**: Outputs results to JSON or console.
 ---
 
 ### Approach
