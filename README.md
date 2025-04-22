@@ -158,7 +158,7 @@ INFO[0000] Concurrent drift detection complete: 1 instance(s) compared
 RESOURCE ID          TYPE          STATUS        DETAILS
 ----------           ----          ------        -------
 i-3710997b49f48cdc3  aws_instance  DRIFTED  instance_type: AWS='t3.micro', TF='t2.micro'
-INFO[2025-04-22T16:09:36+01:00] Drift detection completed    
+INFO[0000] Drift detection completed    
 ```
 
 ```bash
@@ -270,23 +270,16 @@ This is an example of how an EC2 instance might look in the internal model after
 ## 🧱 Architecture Diagram (Logical)
 ```mermaid
 flowchart TD
-    A[CLI (cmd)] -->|Triggers| B[Terraform Parser<br/>(internal/terraform)]
-    A -->|Triggers| C[AWS EC2 Client<br/>(internal/aws)]
-    A -->|Triggers| D[Drift Detector<br/>(internal/detector)]
+    A[CLI (cmd)] --> B[Terraform Parser<br/>(internal/terraform)]
+    A --> C[AWS EC2 Client<br/>(internal/aws)]
+    A --> D[Drift Detector<br/>(internal/detector)]
     
-    B -->|Parses tfstate| D
-    C -->|Fetches live EC2 config| D
+    B --> D
+    C --> D
     
-    D -->|Generates DriftResult[]| E[Reporter<br/>(internal/reporter)]
-
-    %% Optional visual legend (not connected)
-    subgraph Legend [ ]
-        direction TB
-        L1[CLI Layer]
-        L2[Core Components]
-        L3[Output Layer]
-    end
+    D --> E[Reporter<br/>(internal/reporter)]
 ```
+---
 
 ### Approach
  - Interface-driven design for testability
