@@ -36,3 +36,12 @@ func NewClient(ctx context.Context, cfg *cfg.Config, logger *logrus.Logger) (*Cl
 		logger: logger,
 	}, nil
 }
+
+// expose accessors for testing
+func (c *Client) Config() aws.Config {
+	return c.config
+}
+
+func (c *Client) Logger() *logrus.Logger {
+	return c.logger
+}

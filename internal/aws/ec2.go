@@ -18,8 +18,17 @@ type EC2Client interface {
 	DescribeInstances(ctx context.Context, instanceIDs []string) ([]*models.EC2Instance, error)
 }
 
+// for tests
+type EC2API interface {
+	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
+}
+
+//	type EC2ClientImpl struct {
+//		client *ec2.Client
+//		logger *logrus.Logger
+//	}
 type EC2ClientImpl struct {
-	client *ec2.Client
+	client EC2API
 	logger *logrus.Logger
 }
 
@@ -107,4 +116,11 @@ func (c *EC2ClientImpl) DescribeInstances(ctx context.Context, instanceIDs []str
 	}
 
 	return instances, nil
+}
+
+func NewTestEC2Client(mockClient EC2API, logger *logrus.Logger) *EC2ClientImpl {
+	return &EC2ClientImpl{
+		client: mockClient,
+		logger: logger,
+	}
 }
