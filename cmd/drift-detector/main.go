@@ -8,8 +8,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/sirupsen/logrus"
+	"github.com/victor-devv/ec2-drift-detector/internal/aws"
 	"github.com/victor-devv/ec2-drift-detector/internal/config"
+	"github.com/victor-devv/ec2-drift-detector/internal/terraform"
+	"github.com/victor-devv/ec2-drift-detector/pkg/logger"
 )
 
 func main() {
@@ -23,22 +25,24 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	cfg, err := config.New("")
+	cfg, err := config.New()
 	if err != nil {
-		return fmt.Errorf("Failed to load configuration: %v", err)
+		return fmt.Errorf("failed to load configuration: %v", err)
 	}
 
-	logger := logrus.New()
-	logger.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp: true,
-	})
-	logrus.SetOutput(os.Stdout)
-	logLevel, err := logrus.ParseLevel(cfg.Log.Level)
+	logger := logger.New(cfg)
+
+	awsClient, err := aws.NewClient(ctx, cfg, logger)
 	if err != nil {
-		logger.WithError(err).Warn("Invalid log level specified, defaulting to info")
-		logLevel = logrus.InfoLevel
+		return fmt.Errorf("failed to create AWS client: %w", err)
 	}
-	logrus.SetLevel(logLevel)
+
+	ec2Client := aws.NewEC2Client(awsClient, cfg, logger)
+
+	tfParser, err := terraform.GetParser(logger, cfg.Terraform.StateFile)
+	if err != nil {
+		return fmt.Errorf("failed to create Terraform parser: %w", err)
+	}
 
 	return nil
 }
