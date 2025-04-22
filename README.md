@@ -157,15 +157,17 @@ flowchart TD
 ### Trade-Offs
  - Uses Go stdlib flag instead of cobra for simplicity
  - Limited to EC2 drift only for now (no ELBs, RDS, etc.)
+ - Fails to parse HCL configs with variables
 
 ### ⚠️ Challenges Faced
+ - Issues parsing HCL configurations which use variables
  - Terraform state's nested and sometimes inconsistent structure
  - Handling differences in how AWS and Terraform express tags
- - Simulating real AWS EC2 behavior in LocalStack (e.g., missing metadata fields)
+ - Simulating real AWS EC2 behavior in LocalStack
  - Balancing concurrency with predictable logging and output
 
 ### 🚀 Future Improvements
- - Add support for HCL .tf parsing using hclparse
+ - Add support for HCL .tf parsing with variables
  - Extend drift detection to other AWS resources (e.g., S3, RDS)
  - Use cobra or urfave/cli for multi-command CLI (scan, report, etc.)
  - Upload reports to S3 or Slack webhook

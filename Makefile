@@ -44,9 +44,13 @@ localstack-down:
 tf-init:
 	cd terraform && terraform init
 
+.PHONY: tf-plan
+tf-plan:
+	cd terraform && terraform plan -var-file="config.tfvars" -out="tfplan"
+
 .PHONY: tf-apply
 tf-apply:
-	cd terraform && terraform apply -auto-approve
+	cd terraform && terraform apply tfplan -auto-approve
 
 .PHONY: tf-destroy
 tf-destroy:

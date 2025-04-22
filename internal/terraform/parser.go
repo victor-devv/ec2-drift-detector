@@ -10,6 +10,7 @@ package terraform
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/sirupsen/logrus"
@@ -29,14 +30,23 @@ type BaseParser struct {
 
 // GetParser returns the appropriate parser based on the file extension
 func GetParser(log *logrus.Logger, path string) (Parser, error) {
-	ext := filepath.Ext(path)
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat path: %w", err)
+	}
 
-	switch ext {
-	case ".json", ".tfstate":
-		return NewStateParser(path, log), nil
-	case ".tf", ".hcl":
+	if fileInfo.IsDir() {
 		return NewHCLParser(path, log), nil
-	default:
-		return nil, fmt.Errorf("unsupported file extension: %s", ext)
+	} else {
+		ext := filepath.Ext(path)
+
+		switch ext {
+		case ".json", ".tfstate":
+			return NewStateParser(path, log), nil
+		case ".tf", ".hcl":
+			return NewHCLParser(path, log), nil
+		default:
+			return nil, fmt.Errorf("unsupported file extension: %s", ext)
+		}
 	}
 }

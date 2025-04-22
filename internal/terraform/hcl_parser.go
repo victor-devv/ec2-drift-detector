@@ -119,10 +119,10 @@ func (p *HCLParser) parseEC2Block(block *hcl.Block, name string) (models.EC2Inst
 
 	// Parse attributes
 	for attrName, attr := range attrs {
-		// val, diags := attr.Expr.Value(nil)
 		val, diags := attr.Expr.Value(&hcl.EvalContext{})
-		if diags.HasErrors() {
-			p.log.Warn(fmt.Sprintf("Failed to evaluate attribute %s: %s", attrName, diags.Error()))
+
+		if diags.HasErrors() || val.Type() == cty.DynamicPseudoType || val.IsNull() {
+			p.log.Warnf("Skipping dynamic/unresolvable attribute %s", attrName)
 			continue
 		}
 
