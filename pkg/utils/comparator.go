@@ -1,3 +1,4 @@
+// Helper: CompareMaps compares two maps and returns differences
 package utils
 
 import (

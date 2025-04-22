@@ -1,3 +1,10 @@
+/*
+Parses a standard Terraform .tfstate file or HCL configuration.
+
+Extracts EC2 instance blocks into internal EC2Instance models.
+
+Designed for extensibility to .tf HCL parsing.
+*/
 package terraform
 
 import (

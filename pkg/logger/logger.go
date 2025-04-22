@@ -1,3 +1,8 @@
+/*
+Package Logger provides centralized log configuration via logrus.
+
+Verbose mode toggle via CLI or env.
+*/
 package logger
 
 import (

@@ -1,3 +1,12 @@
+/*
+Compares EC2 instances from AWS and Terraform.
+
+Attributes supported: instance_type, ami, tags, subnet_id, vpc_security_group_ids, etc.
+
+DetectDrift (sequential) and DetectDriftConcurrent (parallel).
+
+Produces a list of DriftResult values containing mismatched attributes.
+*/
 package detector
 
 import (

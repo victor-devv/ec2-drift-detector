@@ -1,3 +1,10 @@
+/*
+Package main serves as the entrypoint of the application.
+
+It bootstraps config, logger, CLI parser, AWS client, Terraform parser, drift detector, and result reporter.
+
+It executes either sequential or concurrent form.
+*/
 package main
 
 import (
@@ -43,7 +50,7 @@ func run() error {
 
 	// refresh config
 	cfg = app.Config()
-	app.PreRun(ctx)
+	app.LogStartupInfo(ctx)
 
 	awsClient, err := aws.NewClient(ctx, cfg, logger)
 	if err != nil {

@@ -1,3 +1,10 @@
+/*
+EC2Instance struct: unified schema used by both AWS and Terraform representations.
+
+DriftResult: high-level drift info for each EC2 instance.
+
+AttributeDiff: details about mismatched attributes.
+*/
 package models
 
 // EC2Instance represents the common structure for EC2 instances from both AWS and Terraform

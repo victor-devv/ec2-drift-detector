@@ -1,3 +1,10 @@
+/*
+Package config loads environment variables using caarlos0/env.
+
+Validates required fields like AWS_DEFAULT_REGION and Terraform state file location.
+
+Groups logical config segments (AWS, Terraform, Detector, Logging).
+*/
 package config
 
 import (

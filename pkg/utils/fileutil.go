@@ -1,3 +1,4 @@
+// Helper: AppendUniqueSuffix to add timestamp suffix to filenames.
 package utils
 
 import (

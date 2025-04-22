@@ -1,3 +1,12 @@
+/*
+Outputs drift results to:
+
+Console (human-readable format)
+
+JSON (for CI/CD, dashboards, or file storage)
+
+Supports file output via --output-file
+*/
 package reporter
 
 import (

@@ -1,3 +1,12 @@
+/*
+Wraps AWS SDK v2 to describe EC2 instances.
+
+Uses filters if instance IDs are provided.
+
+Converts AWS ec2.Instance data to internal EC2Instance model.
+
+Includes support for test mocking via an injectable interface.
+*/
 package aws
 
 import (
