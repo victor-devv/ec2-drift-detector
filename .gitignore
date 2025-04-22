@@ -6,3 +6,5 @@ __debug*
 volume
 .terraform
 terraform.tfstate*
+coverage.out
+tfplan
