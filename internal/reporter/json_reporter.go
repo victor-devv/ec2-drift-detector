@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/victor-devv/ec2-drift-detector/internal/models"
+	"github.com/victor-devv/ec2-drift-detector/pkg/utils"
 )
 
 // JSONReporter reports drift detection results in JSON format
@@ -29,6 +30,19 @@ func NewJSONReporter(log *logrus.Logger) *JSONReporter {
 // WithWriter sets the writer for the JSON reporter
 func (r *JSONReporter) WithWriter(writer io.Writer) *JSONReporter {
 	r.writer = writer
+	return r
+}
+
+// enable storing output to file
+func (r *JSONReporter) WithOutputFile(path string) *JSONReporter {
+	path = utils.AppendUniqueSuffix(path)
+	f, err := os.Create(path)
+	if err != nil {
+		r.log.Errorf("Failed to create output file: %v", err)
+		r.writer = os.Stdout
+	} else {
+		r.writer = f
+	}
 	return r
 }
 

@@ -76,7 +76,11 @@ func run() error {
 	var rep reporter.Reporter
 	switch cfg.Detector.OutputFormat {
 	case "json":
-		rep = reporter.NewJSONReporter(logger)
+		if cfg.Detector.OutputFile != "" {
+			rep = reporter.NewJSONReporter(logger).WithOutputFile(cfg.Detector.OutputFile)
+		} else {
+			rep = reporter.NewJSONReporter(logger)
+		}
 	default:
 		rep = reporter.NewConsoleReporter(logger)
 	}
@@ -84,6 +88,8 @@ func run() error {
 	if err := rep.Report(ctx, results); err != nil {
 		return fmt.Errorf("reporting failed: %w", err)
 	}
+
+	logger.Info("Drift detection completed")
 
 	return nil
 }
