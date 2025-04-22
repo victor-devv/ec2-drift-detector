@@ -23,214 +23,149 @@ type EC2Detector struct {
 }
 
 // NewEC2Detector creates a new EC2 detector
-func NewEC2Detector(ec2Client *aws.EC2ClientImpl, tfParser terraform.Parser, log *logrus.Logger) *EC2Detector {
+func NewEC2Detector(ec2Client aws.EC2ClientImpl, tfParser terraform.Parser, log *logrus.Logger) *EC2Detector {
 	return &EC2Detector{
-		ec2Client:  *ec2Client,
+		ec2Client:  ec2Client,
 		tfParser:   tfParser,
 		log:        log,
 		comparator: utils.NewComparator(),
 	}
 }
 
+func existenceDrift(id string, inAWS, inTF bool) models.DriftResult {
+	awsVal := "not_exists"
+	tfVal := "not_exists"
+	if inAWS {
+		awsVal = "exists"
+	}
+	if inTF {
+		tfVal = "exists"
+	}
+	return models.DriftResult{
+		ResourceID:   id,
+		ResourceType: "aws_instance",
+		InTerraform:  inTF,
+		InAWS:        inAWS,
+		Drifted:      true,
+		DriftDetails: []models.AttributeDiff{{
+			Attribute:      "existence",
+			AWSValue:       awsVal,
+			TerraformValue: tfVal,
+		}},
+	}
+}
+
 // DetectDrift checks for differences between AWS EC2 instances and their Terraform definitions
 func (d *EC2Detector) DetectDrift(ctx context.Context, attributes []string) ([]models.DriftResult, error) {
-	// Get instance IDs from Terraform
 	instanceConfigs, err := d.tfParser.GetEC2Instances(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get instance configurations from Terraform: %w", err)
 	}
-
 	if len(instanceConfigs) == 0 {
 		return []models.DriftResult{}, nil
 	}
 
-	// Extract instance IDs
-	var instanceIDs []string
 	instanceIDToConfig := make(map[string]models.EC2Instance)
+	instanceIDs := make([]string, 0, len(instanceConfigs))
 	for _, config := range instanceConfigs {
 		instanceIDs = append(instanceIDs, config.ID)
 		instanceIDToConfig[config.ID] = config
 	}
 
-	// Get actual instances from AWS
 	awsInstances, err := d.ec2Client.DescribeInstances(ctx, instanceIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to describe AWS instances: %w", err)
 	}
 
-	// Compare instances
-	results := make([]models.DriftResult, 0, len(instanceIDs))
+	awsInstanceMap := make(map[string]models.EC2Instance)
+	for _, inst := range awsInstances {
+		awsInstanceMap[inst.ID] = inst
+	}
+
+	results := make([]models.DriftResult, 0)
 	for _, awsInstance := range awsInstances {
 		tfInstance, exists := instanceIDToConfig[awsInstance.ID]
 		if !exists {
-			// Instance exists in AWS but not in Terraform
-			results = append(results, models.DriftResult{
-				ResourceID:   awsInstance.ID,
-				ResourceType: "aws_instance",
-				InTerraform:  false,
-				InAWS:        true,
-				Drifted:      true,
-				DriftDetails: []models.AttributeDiff{
-					{
-						Attribute:      "existence",
-						AWSValue:       "exists",
-						TerraformValue: "not_exists",
-					},
-				},
-			})
+			results = append(results, existenceDrift(awsInstance.ID, true, false))
 			continue
 		}
-
-		// Check for drift between AWS and Terraform
-		driftResult := d.compareEC2Instance(awsInstance, tfInstance, attributes)
-		results = append(results, driftResult)
+		results = append(results, d.compareEC2Instance(awsInstance, tfInstance, attributes))
 	}
 
-	// Check for instances in Terraform but not in AWS
 	for id, tfInstance := range instanceIDToConfig {
-		found := false
-		for _, awsInstance := range awsInstances {
-			if awsInstance.ID == id {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			results = append(results, models.DriftResult{
-				ResourceID:   tfInstance.ID,
-				ResourceType: "aws_instance",
-				InTerraform:  true,
-				InAWS:        false,
-				Drifted:      true,
-				DriftDetails: []models.AttributeDiff{
-					{
-						Attribute:      "existence",
-						AWSValue:       "not_exists",
-						TerraformValue: "exists",
-					},
-				},
-			})
+		if _, found := awsInstanceMap[id]; !found {
+			results = append(results, existenceDrift(tfInstance.ID, false, true))
 		}
 	}
 
+	d.log.Infof("Drift detection complete: %d instance(s) compared", len(results))
 	return results, nil
 }
 
 // DetectDriftConcurrent checks for differences concurrently for multiple EC2 instances
 func (d *EC2Detector) DetectDriftConcurrent(ctx context.Context, attributes []string) ([]models.DriftResult, error) {
-	// Get instance IDs from Terraform
 	instanceConfigs, err := d.tfParser.GetEC2Instances(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get instance configurations from Terraform: %w", err)
 	}
-
 	if len(instanceConfigs) == 0 {
 		return []models.DriftResult{}, nil
 	}
 
-	// Extract instance IDs
-	var instanceIDs []string
 	instanceIDToConfig := make(map[string]models.EC2Instance)
+	instanceIDs := make([]string, 0, len(instanceConfigs))
 	for _, config := range instanceConfigs {
 		instanceIDs = append(instanceIDs, config.ID)
 		instanceIDToConfig[config.ID] = config
 	}
 
-	// Get actual instances from AWS
 	awsInstances, err := d.ec2Client.DescribeInstances(ctx, instanceIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to describe AWS instances: %w", err)
 	}
 
-	// Create a list of comparison tasks
-	type comparisonTask struct {
-		awsInstance  models.EC2Instance
-		tfInstance   models.EC2Instance
-		attributeSet []string
-	}
-
-	// Build comparison tasks
-	var tasks []comparisonTask
-	missingInAWS := make([]string, 0)
-	missingInTF := make([]string, 0)
-
-	// First, check instances in AWS
+	tasks := []comparisonTask{}
+	awsInstanceMap := make(map[string]models.EC2Instance)
 	for _, awsInstance := range awsInstances {
-		tfInstance, exists := instanceIDToConfig[awsInstance.ID]
-		if exists {
+		awsInstanceMap[awsInstance.ID] = awsInstance
+		if tfInstance, exists := instanceIDToConfig[awsInstance.ID]; exists {
 			tasks = append(tasks, comparisonTask{
 				awsInstance:  awsInstance,
 				tfInstance:   tfInstance,
 				attributeSet: attributes,
 			})
-		} else {
-			missingInTF = append(missingInTF, awsInstance.ID)
 		}
 	}
 
-	// Check for instances in Terraform but not in AWS
-	for id, tfInstance := range instanceIDToConfig {
-		found := false
-		for _, awsInstance := range awsInstances {
-			if awsInstance.ID == id {
-				found = true
-				break
-			}
-		}
-		if !found {
-			missingInAWS = append(missingInAWS, tfInstance.ID)
-		}
-	}
-
-	// Run comparisons concurrently
-	concurrency := runtime.NumCPU()
-	results, err := runConcurrent(ctx, tasks, concurrency, func(ctx context.Context, task comparisonTask) (models.DriftResult, error) {
+	results, err := RunConcurrent(ctx, tasks, runtime.NumCPU(), func(ctx context.Context, task comparisonTask) (models.DriftResult, error) {
 		return d.compareEC2Instance(task.awsInstance, task.tfInstance, task.attributeSet), nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error during concurrent drift detection: %w", err)
 	}
 
-	// Add missing instances
-	for _, id := range missingInTF {
-		results = append(results, models.DriftResult{
-			ResourceID:   id,
-			ResourceType: "aws_instance",
-			InTerraform:  false,
-			InAWS:        true,
-			Drifted:      true,
-			DriftDetails: []models.AttributeDiff{
-				{
-					Attribute:      "existence",
-					AWSValue:       "exists",
-					TerraformValue: "not_exists",
-				},
-			},
-		})
+	for id := range awsInstanceMap {
+		if _, found := instanceIDToConfig[id]; !found {
+			results = append(results, existenceDrift(id, true, false))
+		}
 	}
 
-	for _, id := range missingInAWS {
-		results = append(results, models.DriftResult{
-			ResourceID:   id,
-			ResourceType: "aws_instance",
-			InTerraform:  true,
-			InAWS:        false,
-			Drifted:      true,
-			DriftDetails: []models.AttributeDiff{
-				{
-					Attribute:      "existence",
-					AWSValue:       "not_exists",
-					TerraformValue: "exists",
-				},
-			},
-		})
+	for id := range instanceIDToConfig {
+		if _, found := awsInstanceMap[id]; !found {
+			results = append(results, existenceDrift(id, false, true))
+		}
 	}
 
+	d.log.Infof("Concurrent drift detection complete: %d instance(s) compared", len(results))
 	return results, nil
 }
 
-// compareEC2Instance compares AWS and Terraform EC2 instance configurations
+type comparisonTask struct {
+	awsInstance  models.EC2Instance
+	tfInstance   models.EC2Instance
+	attributeSet []string
+}
+
 func (d *EC2Detector) compareEC2Instance(awsInstance, tfInstance models.EC2Instance, attributes []string) models.DriftResult {
 	result := models.DriftResult{
 		ResourceID:   awsInstance.ID,
@@ -241,19 +176,12 @@ func (d *EC2Detector) compareEC2Instance(awsInstance, tfInstance models.EC2Insta
 		DriftDetails: []models.AttributeDiff{},
 	}
 
-	// If attributes list is empty, check all attributes
-	if len(attributes) == 0 {
-		attributes = []string{
-			"instance_type",
-			"ami",
-			"subnet_id",
-			"vpc_security_group_ids",
-			"tags",
-		}
+	compareAttrs := attributes
+	if len(compareAttrs) == 0 {
+		compareAttrs = []string{"instance_type", "ami", "subnet_id", "vpc_security_group_ids", "tags"}
 	}
 
-	// Check each attribute
-	for _, attr := range attributes {
+	for _, attr := range compareAttrs {
 		switch attr {
 		case "instance_type":
 			if awsInstance.InstanceType != tfInstance.InstanceType {
@@ -304,8 +232,7 @@ func (d *EC2Detector) compareEC2Instance(awsInstance, tfInstance models.EC2Insta
 				}
 			}
 		default:
-			// Handle unknown attribute
-			d.log.Warn(fmt.Sprintf("Unknown attribute for comparison: %s", attr))
+			d.log.Warnf("Unknown attribute for comparison: %s", attr)
 		}
 	}
 
