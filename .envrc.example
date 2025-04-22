@@ -1,11 +1,14 @@
-export PROJECT_ROOT=$(pwd)
-export SERVER_HOST=localhost
-export SERVER_PORT=4000
+export APP=ec2-drift-detector
+export CONCURRENT=true
+export LOG_LEVEL=debug
 
-export AWS_ACCESS_KEY_ID=dummy
-export AWS_SECRET_ACCESS_KEY=dummy
-export AWS_DEFAULT_REGION=eu-north-1
+export AWS_ACCESS_KEY_ID=
+export AWS_SECRET_ACCESS_KEY=
+export AWS_DEFAULT_REGION=
+export AWS_EC2_ENDPOINT=http://localhost:4566
+export TERRAFORM_STATE_FILE=terraform/terraform.tfstate
 
 export TF_VAR_aws_access_key_id=${AWS_ACCESS_KEY_ID}
 export TF_VAR_aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}
 export TF_VAR_aws_default_region=${AWS_DEFAULT_REGION}
+export TF_VAR_ec2_endpoint=${AWS_EC2_ENDPOINT}
