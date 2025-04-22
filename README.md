@@ -79,7 +79,9 @@ make cover-html
 
 ---
 
-### 🧭 CLI Usage Example
+### 🧭 CLI Usage Examples
+
+**Non-Drifted**
 
 ```bash
 $ go run cmd/drift-detector/main.go \
@@ -94,7 +96,142 @@ INFO[0000] Terraform path: terraform.tfstate
 INFO[0000] Attributes to check: [instance_type tags ami]
 INFO[0000] Output format: json
 INFO[0000] Running concurrent drift detection
+INFO[0000] Concurrent drift detection complete: 1 instance(s) compared 
+{
+  "summary": {
+    "totalResources": 1,
+    "driftedResources": 0,
+    "nonDriftedResources": 1
+  },
+  "results": [
+    {
+      "resourceId": "i-3710997b49f48cdc3",
+      "resourceType": "aws_instance",
+      "inTerraform": true,
+      "inAWS": true,
+      "drifted": false,
+      "attribute_diffs": []
+    }
+  ]
+}
 INFO[0000] Drift detection completed
+```
+
+```bash
+$ go run cmd/drift-detector/main.go \
+  --state-file=terraform.tfstate \
+  --attributes=instance_type,tags,ami \
+  --output=console \
+  --verbose
+
+INFO[0000] Starting drift detection                     
+INFO[0000] Terraform path: terraform/terraform.tfstate  
+INFO[0000] Attributes to check: [instance_type tags vpc_security_group_ids] 
+INFO[0000] Output format: console                       
+INFO[0000] Running concurrent drift detection           
+INFO[0000] Concurrent drift detection complete: 1 instance(s) compared 
+✓ No drift detected across 1 resource(s)
+
+RESOURCE ID          TYPE          STATUS   DETAILS
+----------           ----          ------   -------
+i-3710997b49f48cdc3  aws_instance  OK  -
+INFO[0000] Drift detection completed  
+```
+
+**Drifted**
+
+```bash
+$ go run cmd/drift-detector/main.go \
+  --state-file=terraform.tfstate \
+  --attributes=instance_type,tags,ami \
+  --output=console \
+  --verbose
+  
+INFO[0000] Starting drift detection                     
+INFO[0000] Terraform path: terraform/terraform.tfstate  
+INFO[0000] Attributes to check: [instance_type tags vpc_security_group_ids] 
+INFO[0000] Output format: console                       
+INFO[0000] Running concurrent drift detection           
+INFO[0000] Concurrent drift detection complete: 1 instance(s) compared 
+✗ Drift detected in 1 out of 1 resource(s)
+
+RESOURCE ID          TYPE          STATUS        DETAILS
+----------           ----          ------        -------
+i-3710997b49f48cdc3  aws_instance  DRIFTED  instance_type: AWS='t3.micro', TF='t2.micro'
+INFO[2025-04-22T16:09:36+01:00] Drift detection completed    
+```
+
+```bash
+$ go run cmd/drift-detector/main.go \
+  --state-file=terraform.tfstate \
+  --attributes=instance_type,tags,ami \
+  --output=console \
+  --verbose
+
+INFO[0000] Starting drift detection                     
+INFO[0000] Terraform path: terraform/terraform.tfstate  
+INFO[0000] Attributes to check: [instance_type tags vpc_security_group_ids] 
+INFO[0000] Output format: json                          
+INFO[0000] Running concurrent drift detection           
+INFO[0000] Concurrent drift detection complete: 1 instance(s) compared 
+{
+  "summary": {
+    "totalResources": 1,
+    "driftedResources": 1,
+    "nonDriftedResources": 0
+  },
+  "results": [
+    {
+      "resourceId": "i-3710997b49f48cdc3",
+      "resourceType": "aws_instance",
+      "inTerraform": true,
+      "inAWS": true,
+      "drifted": true,
+      "attribute_diffs": [
+        {
+          "attribute_name": "instance_type",
+          "aws_value": "t3.micro",
+          "terraform_value": "t2.micro",
+          "is_complex": false
+        }
+      ]
+    }
+  ]
+}
+INFO[0000] Drift detection completed  
+```
+
+---
+
+## 🧾 Sample AWS EC2 Response (JSON)
+
+This is an example of how an EC2 instance might look in the internal model after being fetched from AWS and serialized as JSON:
+
+```json
+{
+  "id": "i-0abc1234567890def",
+  "instance_type": "t3.micro",
+  "ami": "ami-0abcdef1234567890",
+  "subnet_id": "subnet-0123456789abcdef0",
+  "vpc_id": "vpc-0a1b2c3d4e5f6g7h8",
+  "security_group_ids": ["sg-0123456789abcdef0"],
+  "security_group_names": ["localstack-sg"],
+  "key_name": "my-keypair",
+  "iam_role": "ec2-readonly",
+  "public_ip": "54.123.45.67",
+  "private_ip": "10.0.1.23",
+  "tags": {
+    "Name": "LocalStack EC2",
+    "Env": "dev"
+  },
+  "root_volume_size": 8,
+  "root_volume_type": "gp2",
+  "user_data": "IyEvYmluL2Jhc2gKZWNobyBIZWxsbyBXb3JsZA==",
+  "ebs_optimized": false,
+  "source_dest_check": true,
+  "monitoring_enabled": false,
+  "termination_protection": false
+}
 ```
 
 ---
@@ -133,18 +270,21 @@ INFO[0000] Drift detection completed
 ## 🧱 Architecture Diagram (Logical)
 ```mermaid
 flowchart TD
-    A[CLI (cmd/)] -->|Triggers| B[Terraform Parser\n(internal/terraform)]
-    A -->|Triggers| C[AWS EC2 Client\n(internal/aws)]
-    A -->|Triggers| D[Drift Detector\n(internal/detector)]
+    A[CLI (cmd)] -->|Triggers| B[Terraform Parser<br/>(internal/terraform)]
+    A -->|Triggers| C[AWS EC2 Client<br/>(internal/aws)]
+    A -->|Triggers| D[Drift Detector<br/>(internal/detector)]
     
     B -->|Parses tfstate| D
     C -->|Fetches live EC2 config| D
     
-    D -->|Generates DriftResult[]| E[Reporter\n(internal/reporter)]
-    
-    subgraph Legend
-        F[CLI] --> G[Core Components]
-        G --> H[Output]
+    D -->|Generates DriftResult[]| E[Reporter<br/>(internal/reporter)]
+
+    %% Optional visual legend (not connected)
+    subgraph Legend [ ]
+        direction TB
+        L1[CLI Layer]
+        L2[Core Components]
+        L3[Output Layer]
     end
 ```
 
