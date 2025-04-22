@@ -112,7 +112,8 @@ func (p *HCLParser) parseEC2Block(block *hcl.Block, name string) (models.EC2Inst
 
 	// Parse attributes
 	for attrName, attr := range attrs {
-		val, diags := attr.Expr.Value(nil)
+		// val, diags := attr.Expr.Value(nil)
+		val, diags := attr.Expr.Value(&hcl.EvalContext{})
 		if diags.HasErrors() {
 			p.log.Warn(fmt.Sprintf("Failed to evaluate attribute %s: %s", attrName, diags.Error()))
 			continue
@@ -136,7 +137,12 @@ func (p *HCLParser) parseEC2Block(block *hcl.Block, name string) (models.EC2Inst
 				instance.SubnetID = val.AsString()
 			}
 		case "vpc_security_group_ids":
-			if !val.IsNull() && val.Type().IsListType() {
+			if diags.HasErrors() {
+				p.log.Warnf("Failed to evaluate vpc_security_group_ids: %v", diags)
+				break
+			}
+
+			if !val.IsNull() && (val.Type().IsTupleType() || val.Type().IsListType()) {
 				for it := val.ElementIterator(); it.Next(); {
 					_, v := it.Element()
 					if v.Type() == cty.String {
@@ -145,7 +151,12 @@ func (p *HCLParser) parseEC2Block(block *hcl.Block, name string) (models.EC2Inst
 				}
 			}
 		case "tags":
-			if !val.IsNull() && val.Type().IsMapType() {
+			if diags.HasErrors() {
+				p.log.Warnf("Failed to evaluate tags: %v", diags)
+				break
+			}
+
+			if val.Type().IsObjectType() || val.Type().IsMapType() {
 				instance.Tags = make(map[string]string)
 				for it := val.ElementIterator(); it.Next(); {
 					k, v := it.Element()
