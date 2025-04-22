@@ -21,10 +21,10 @@ func New(config *config.Config) *logrus.Logger {
 
 	logLevel, err := logrus.ParseLevel(config.Log.Level)
 	if err != nil {
-		logger.WithError(err).Warn("Invalid log level specified, defaulting to info")
+		logger.Warnf("Invalid log level specified (%s), defaulting to info", config.Log.Level)
 		logLevel = logrus.InfoLevel
 	}
-	logrus.SetLevel(logLevel)
+	logger.SetLevel(logLevel)
 
 	return logger
 }

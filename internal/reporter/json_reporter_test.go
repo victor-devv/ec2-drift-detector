@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -89,4 +92,35 @@ func TestJSONReporter_EmptyInput(t *testing.T) {
 	output := buf.String()
 	require.Contains(t, output, `"totalResources":0`)
 	require.Contains(t, output, `"results":[]`)
+}
+
+func TestWithOutputFile_CreatesFileWithUniqueSuffix(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePrefix := filepath.Join(tmpDir, "drift-report.json")
+
+	rep := reporter.NewJSONReporter(logrus.New())
+	rep = rep.WithOutputFile(filePrefix)
+
+	// Check that writer is a file (not os.Stdout)
+	file, ok := rep.Writer().(*os.File)
+	require.True(t, ok, "Expected writer to be a file")
+
+	// File should be inside tmpDir and have a suffix
+	require.True(t, strings.HasPrefix(file.Name(), filePrefix[:len(filePrefix)-len(".json")]))
+	require.True(t, strings.HasSuffix(file.Name(), ".json"))
+
+	// Check file exists
+	_, err := os.Stat(file.Name())
+	require.NoError(t, err)
+}
+
+func TestWithOutputFile_FallbackToStdoutOnInvalidPath(t *testing.T) {
+	// invalid path
+	badPath := "/invalid/path/should-fail.json"
+
+	rep := reporter.NewJSONReporter(logrus.New())
+	rep = rep.WithOutputFile(badPath)
+
+	// Should fallback to stdout
+	require.Equal(t, os.Stdout, rep.Writer())
 }

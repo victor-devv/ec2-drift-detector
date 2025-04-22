@@ -33,6 +33,10 @@ func (r *JSONReporter) WithWriter(writer io.Writer) *JSONReporter {
 	return r
 }
 
+func (r *JSONReporter) Writer() io.Writer {
+	return r.writer
+}
+
 // enable storing output to file
 func (r *JSONReporter) WithOutputFile(path string) *JSONReporter {
 	path = utils.AppendUniqueSuffix(path)
