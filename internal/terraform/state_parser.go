@@ -1,4 +1,3 @@
-// internal/terraform/state_parser.go
 package terraform
 
 import (

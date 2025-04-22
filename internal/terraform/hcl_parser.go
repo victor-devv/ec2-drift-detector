@@ -1,4 +1,3 @@
-// internal/terraform/hcl_parser.go
 package terraform
 
 import (

@@ -1,4 +1,3 @@
-// internal/reporter/console_reporter.go
 package reporter
 
 import (

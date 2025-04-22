@@ -1,4 +1,3 @@
-// pkg/utils/comparator.go
 package utils
 
 import (
