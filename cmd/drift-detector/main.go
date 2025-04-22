@@ -57,7 +57,7 @@ func run() error {
 		return fmt.Errorf("failed to create Terraform parser: %w", err)
 	}
 
-	ec2Detector := detector.NewEC2Detector(ec2Client, tfParser, logger)
+	ec2Detector := detector.NewEC2Detector(*ec2Client, tfParser, logger)
 
 	// Detect drift
 	var results []models.DriftResult

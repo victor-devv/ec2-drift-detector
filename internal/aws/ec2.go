@@ -23,10 +23,6 @@ type EC2API interface {
 	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
 }
 
-//	type EC2ClientImpl struct {
-//		client *ec2.Client
-//		logger *logrus.Logger
-//	}
 type EC2ClientImpl struct {
 	client EC2API
 	logger *logrus.Logger

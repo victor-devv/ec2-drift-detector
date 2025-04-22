@@ -21,7 +21,7 @@ type BaseDetector struct {
 }
 
 // runConcurrent executes the provided function concurrently for each item in the items slice
-func runConcurrent[T any, R any](ctx context.Context, items []T, concurrency int, fn func(context.Context, T) (R, error)) ([]R, error) {
+func RunConcurrent[T any, R any](ctx context.Context, items []T, concurrency int, fn func(context.Context, T) (R, error)) ([]R, error) {
 	if len(items) == 0 {
 		return []R{}, nil
 	}
