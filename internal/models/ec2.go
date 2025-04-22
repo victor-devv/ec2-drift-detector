@@ -22,3 +22,23 @@ type EC2Instance struct {
 	MonitoringEnabled     bool              `json:"monitoring_enabled"`
 	TerminationProtection bool              `json:"termination_protection"`
 }
+
+// DriftResult represents the differences between AWS and Terraform EC2 resources
+type DriftResult struct {
+	ResourceID   string          `json:"resourceId"`
+	ResourceType string          `json:"resourceType"`
+	InTerraform  bool            `json:"inTerraform"`
+	InAWS        bool            `json:"inAWS"`
+	Drifted      bool            `json:"drifted"`
+	DriftDetails []AttributeDiff `json:"attribute_diffs"`
+}
+
+//map[string]AttributeDiff
+
+// AttributeDiff represents the difference for a single attribute
+type AttributeDiff struct {
+	Attribute      string      `json:"attribute_name"`
+	AWSValue       interface{} `json:"aws_value"`
+	TerraformValue interface{} `json:"terraform_value"`
+	IsComplex      bool        `json:"is_complex"`
+}
