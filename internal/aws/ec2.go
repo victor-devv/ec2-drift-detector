@@ -6,6 +6,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/sirupsen/logrus"
 
 	cfg "github.com/victor-devv/ec2-drift-detector/internal/config"
@@ -35,4 +36,75 @@ func NewEC2Client(awsClient *Client, cfg *cfg.Config, logger *logrus.Logger) *EC
 		client: ec2Client,
 		logger: logger,
 	}
+}
+
+// DescribeInstances retrieves information about multiple EC2 instances
+func (c *EC2ClientImpl) DescribeInstances(ctx context.Context, instanceIDs []string) ([]models.EC2Instance, error) {
+	var instances []models.EC2Instance
+	var nextToken *string
+
+	// Convert string IDs to AWS string pointers
+	var awsInstanceIDs []string
+	if len(instanceIDs) > 0 {
+		awsInstanceIDs = instanceIDs
+	}
+
+	// Define filter for instances if IDs are provided
+	var filters []types.Filter
+	if len(awsInstanceIDs) > 0 {
+		filters = append(filters, types.Filter{
+			Name:   aws.String("instance-id"),
+			Values: awsInstanceIDs,
+		})
+	}
+
+	// Paginate through results
+	for {
+		resp, err := c.client.DescribeInstances(ctx, &ec2.DescribeInstancesInput{
+			InstanceIds: awsInstanceIDs,
+			Filters:     filters,
+			NextToken:   nextToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to describe instances: %w", err)
+		}
+
+		// Process each reservation
+		for _, reservation := range resp.Reservations {
+			for _, instance := range reservation.Instances {
+				// Map AWS instance to our model
+				ec2Instance := models.EC2Instance{
+					ID:           *instance.InstanceId,
+					InstanceType: string(instance.InstanceType),
+					AMI:          *instance.ImageId,
+				}
+
+				// Extract subnet ID if available
+				if instance.SubnetId != nil {
+					ec2Instance.SubnetID = *instance.SubnetId
+				}
+
+				// Extract security groups
+				for _, sg := range instance.SecurityGroups {
+					ec2Instance.SecurityGroupIDs = append(ec2Instance.SecurityGroupIDs, *sg.GroupId)
+				}
+
+				// Extract tags
+				ec2Instance.Tags = make(map[string]string)
+				for _, tag := range instance.Tags {
+					ec2Instance.Tags[*tag.Key] = *tag.Value
+				}
+
+				instances = append(instances, ec2Instance)
+			}
+		}
+
+		// Check if there are more results
+		if resp.NextToken == nil {
+			break
+		}
+		nextToken = resp.NextToken
+	}
+
+	return instances, nil
 }
