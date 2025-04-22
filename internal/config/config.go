@@ -1,11 +1,9 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
+	"fmt"
 
-	"github.com/spf13/viper"
+	"github.com/caarlos0/env/v11"
 )
 
 type Env string
@@ -21,84 +19,36 @@ const (
 type Config struct {
 	Env Env `env:"ENV" envDefault:"dev"`
 
+	Concurrent bool `env:"CONCURRENT" envDefault:"true"`
+
 	AWS struct {
-		DefaultRegion   string `mapstructure:"default_region"`
-		AccessKeyID     string `mapstructure:"access_key_id"`
-		SecretAccessKey string `mapstructure:"secret_access_key"`
-		Endpoint        string `mapstructure:"endpoint"` // For LocalStack
-	} `mapstructure:"aws"`
+		DefaultRegion   string `env:"AWS_DEFAULT_REGION" envDefault:"eu-north-1"`
+		AccessKeyID     string `env:"AWS_ACCESS_KEY_ID"`
+		SecretAccessKey string `env:"AWS_SECRET_ACCESS_KEY "`
+		Ec2Endpoint     string `env:"AWS_EC2_ENDPOINT"`
+	}
 
 	Terraform struct {
-		StateFile  string `mapstructure:"state_file"`
-		ConfigFile string `mapstructure:"config_file"`
-	} `mapstructure:"terraform"`
+		StateFile  string `mapstructure:"TERRAFORM_STATE_FILE" envDefault:"terraform/terraform.tfstate"`
+		ConfigFile string `mapstructure:"TERRAFORM_CONFIG_FILE" envDefault:"terraform/main.tf"`
+	}
 
 	Detector struct {
-		Attributes []string `mapstructure:"attributes"`
-	} `mapstructure:"detector"`
+		Attributes   []string `env:"DRIFT_ATTRIBUTES" envDefault:"instance_type,ami,subnet_id,vpc_security_group_ids,tags"`
+		OutputFormat string   `env:"DRIFT_OUTPUT_FORMAT"`
+		OutputFile   string   `env:"DRIFT_OUTPUT_FILE"`
+	}
 
 	Log struct {
-		Level  string `mapstructure:"level"`
-		Format string `mapstructure:"format"`
-	} `mapstructure:"log"`
+		Level string `env:"LOG_LEVEL"`
+	}
 }
 
-func setDefaults() {
-	viper.SetDefault("aws.region", "us-east-1")
-	viper.SetDefault("aws.endpoint", "")
-
-	viper.SetDefault("terraform.state_file", "terraform.tfstate")
-	viper.SetDefault("terraform.config_file", "main.tf")
-
-	viper.SetDefault("detector.attributes", []string{
-		"instance_type",
-		"tags",
-		"security_groups.group_ids",
-	})
-
-	viper.SetDefault("log.level", "info")
-	viper.SetDefault("log.format", "text")
-}
-
-// LoadConfig loads configuration from file and environment variables
-func New(path string) (*Config, error) {
-	viper.SetConfigName("config") // name of config file (without extension)
-	viper.SetConfigType("yaml")   // or viper.SetConfigType("json")
-
-	if path != "" {
-		// Use config file from the specified path
-		viper.SetConfigFile(path)
-	} else {
-		// Search config in home directory and current directory
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, err
-		}
-
-		viper.AddConfigPath(filepath.Join(home, ".ec2-drift-detector"))
-		viper.AddConfigPath(".")
+func New() (*Config, error) {
+	cfg, err := env.ParseAs[Config]()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
-
-	// Set environment variable prefix and enable automatic env var binding
-	viper.SetEnvPrefix("EC2_DRIFT")
-	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-
-	// Set default values
-	setDefaults()
-
-	// Read configuration
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, err
-		}
-	}
-
-	var cfg Config
-	if err := viper.Unmarshal(&cfg); err != nil {
-		return nil, err
-	}
-
 	return &cfg, nil
 }
 
