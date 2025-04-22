@@ -1,7 +1,7 @@
 build:
 	docker build -t $(APP) .
 
-run:
+run-container:
 	set -a && source .envrc && set +a && docker run --rm \
 		-v $(PWD):/app \
 		-e CONCURRENT=$(CONCURRENT) \
@@ -12,6 +12,9 @@ run:
 		-e AWS_EC2_ENDPOINT=$(AWS_EC2_ENDPOINT) \
 		-e TERRAFORM_STATE_FILE=$(TERRAFORM_STATE_FILE) \
 		$(APP) --state-file=$(TERRAFORM_STATE_FILE) --attributes=instance_type,tags,security_groups
+
+run:
+	go run cmd/drift-detector/main.go --state-file=$(TERRAFORM_STATE_FILE) --attributes=instance_type,tags,vpc_security_group_ids
 
 localstack-up:
 	docker-compose up -d
