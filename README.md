@@ -53,20 +53,16 @@ make tf-init
 make tf-apply
 ```
 
-🧪 Run Drift Detection (edit cli params in make file or .envrc)
+🧪 Run Drift Detection (built binary)
+
+```bash
+make run-binary
+```
+
+Or using go run
 
 ```bash
 make run
-```
-
-Or Manually
-
-```bash
-./ec2-drift-detector \
-  --state-file=internal/terraform/terraform.tfstate \
-  --attributes=instance_type,tags,ami \
-  --output=json \
-  --output-file=drift-report.json
 ```
 
 ### 🧪 Run Tests
@@ -76,6 +72,85 @@ make test
 make cover-summary
 make cover-html
 ```
+
+### Running the Application
+
+To check for drift in all instances:
+
+```bash
+./drift-detector detect
+```
+
+To check for drift in a specific instance:
+
+```bash
+./drift-detector detect i-1234567890abcdef0
+```
+
+To run as a server with scheduled checks:
+
+```bash
+./drift-detector server
+```
+
+## Configuration
+
+The application can be configured through:
+
+1. Configuration files (YAML)
+2. Environment variables via .env or .envrc
+3. Command-line flags
+
+### Samply config.yaml
+
+```yaml
+app:
+  log_level: INFO
+  json_logs: false
+  schedule_expression: "0 */6 * * *"
+
+aws:
+  region: us-west-2
+  profile: default
+  use_localstack: false
+
+terraform:
+  state_file: terraform.tfstate
+  # Alternatively, use HCL files:
+  # hcl_dir: terraform/
+  # use_hcl: true
+
+drift_detection:
+  source_of_truth: terraform
+  attributes:
+    - instance_type
+    - ami
+    - vpc_security_group_ids
+    - tags
+  parallel_checks: 5
+  timeout_seconds: 60
+
+reporter:
+  type: both  # console, json, or both
+  output_file: drift-report.json
+  pretty_print: true
+```
+### Environment Variables
+
+Environment variables are prefixed with `DRIFT_` and use underscores:
+
+```bash
+export DRIFT_APP_LOG_LEVEL=DEBUG
+export DRIFT_AWS_REGION=us-west-2
+export DRIFT_AWS_USE_LOCALSTACK=true
+export DRIFT_TERRAFORM_STATE_FILE=terraform.tfstate
+export DRIFT_DRIFT_DETECTION_SOURCE_OF_TRUTH=terraform
+```
+
+### Command-Line Flags
+
+```bash
+./drift-detector detect --state-file=terraform.tfstate
 
 ---
 
@@ -253,19 +328,33 @@ This is an example of how an EC2 instance might look in the internal model after
 
 ## 🧱 Design & Architecture
 
+The application follows Domain-Driven Design principles:
+
+- **Domain Layer**: Core business logic and models
+- **Application Layer**: Orchestration of domain services
+- **Infrastructure Layer**: External dependencies (AWS, Terraform)
+- **Presentation Layer**: CLI and reporting interfaces
+
 ### Project Structure
 
-| Directory          | Description                          |
-|--------------------|--------------------------------------|
-| `/cmd/`            | CLI entrypoint                       |
-| `/internal/aws/`   | AWS SDK wrappers                     |
-| `/internal/config/`| Environment and validation config    |
-| `/internal/detector/` | Core drift detection logic        |
-| `/internal/terraform/` | Terraform state parser           |
-| `/internal/cli/`   | CLI argument parser                  |
-| `/internal/reporter/` | Console/JSON report output       |
-| `/pkg/logger/`     | Logrus-based logger                  |
-| `/pkg/utils/`      | Miscellaneous utilities (file helpers, etc.) |
+```
+terraform-drift-detector/
+├── cmd/                    # Command-line entry points
+├── internal/               # Internal packages
+│   ├── app/                # Application services
+│   ├── common/             # Common utilities
+│   ├── config/             # Configuration
+│   ├── domain/             # Domain models and services
+│   ├── infrastructure/     # External dependencies
+│   └── presentation/       # User interfaces
+├── pkg/                    # Public packages
+├── test/                   # Tests and fixtures
+├── docker-compose.yml      # Docker Compose configuration
+├── Dockerfile              # Docker build file
+├── go.mod                  # Go modules
+├── Makefile                # Build and development commands
+└── README.md               # This file
+```
 
 ## 🧱 Architecture Diagram (Logical)
 

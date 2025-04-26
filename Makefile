@@ -44,7 +44,7 @@ run:
 
 run-binary:
 	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) -v ./cmd/drift-detector
-	./$(BINARY_NAME)
+	./$(BINARY_NAME) detect --state-file=$(STATE_FILE) --attributes=$(ATTRIBUTES) --output=$(OUTPUT_FORMAT) --output-file=$(OUTPUT_FILE)
 
 # Manage dependencies
 deps:
