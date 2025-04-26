@@ -77,7 +77,7 @@ tf-plan:
 	cd terraform && terraform plan -var-file="config.tfvars" -out="tfplan"
 
 tf-apply:
-	cd terraform && terraform apply tfplan -auto-approve
+	cd terraform && terraform apply -auto-approve tfplan
 
 tf-destroy:
 	cd terraform && terraform destroy -auto-approve

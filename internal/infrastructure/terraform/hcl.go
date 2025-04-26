@@ -3,11 +3,11 @@ package terraform
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/hclsimple"
+	"github.com/hashicorp/hcl/v2/gohcl"
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/victor-devv/ec2-drift-detector/internal/common/errors"
 	"github.com/victor-devv/ec2-drift-detector/internal/common/logging"
 	"github.com/victor-devv/ec2-drift-detector/internal/domain/model"
@@ -72,19 +72,32 @@ func (p *HCLParser) ParseHCLDir(ctx context.Context, dirPath string) ([]*model.I
 
 // ParseHCLFile parses a single Terraform HCL file
 func (p *HCLParser) ParseHCLFile(ctx context.Context, filePath string) ([]*model.Instance, error) {
-	p.logger.Info(fmt.Sprintf("Parsing Terraform HCL file: %s", filePath))
+	p.logger.Info("Parsing Terraform HCL file: %s", filePath)
 
-	// Read the file
-	fileContent, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, errors.NewOperationalError(fmt.Sprintf("Failed to read Terraform file: %s", filePath), err)
+	// Create a new parser
+	parser := hclparse.NewParser()
+
+	// Parse the HCL file
+	file, diags := parser.ParseHCLFile(filePath)
+	if diags.HasErrors() {
+		return nil, errors.NewOperationalError(fmt.Sprintf("Failed to parse HCL in %s", filePath), diags)
 	}
 
-	// Parse the HCL configuration
-	var config TerraformConfig
-	err = hclsimple.Decode(filePath, fileContent, nil, &config)
-	if err != nil {
-		return nil, errors.NewOperationalError(fmt.Sprintf("Failed to decode HCL in %s", filePath), err)
+	// Define a struct to hold the configuration
+	type ResourceConfig struct {
+		Resources []struct {
+			Type string   `hcl:"type,label"`
+			Name string   `hcl:"name,label"`
+			Body hcl.Body `hcl:",remain"`
+		} `hcl:"resource,block"`
+	}
+
+	var config ResourceConfig
+
+	// Decode the file body into the config struct
+	diags = gohcl.DecodeBody(file.Body, nil, &config)
+	if diags.HasErrors() {
+		return nil, errors.NewOperationalError(fmt.Sprintf("Failed to decode HCL in %s", filePath), diags)
 	}
 
 	var instances []*model.Instance
@@ -93,12 +106,22 @@ func (p *HCLParser) ParseHCLFile(ctx context.Context, filePath string) ([]*model
 	for _, resource := range config.Resources {
 		// Only process aws_instance resources
 		if resource.Type == "aws_instance" {
-			instance, err := p.extractInstanceFromResource(resource)
+			// Extract attributes from the resource body
+			attrs, err := p.extractAttributes(resource.Body)
 			if err != nil {
-				p.logger.Warn(fmt.Sprintf("Failed to extract instance from resource %s: %v", resource.Name, err))
+				p.logger.Warn("Failed to extract attributes from resource %s: %v", resource.Name, err)
 				continue
 			}
 
+			// Add resource metadata
+			attrs["resource_name"] = resource.Name
+			attrs["resource_type"] = resource.Type
+
+			// Generate ID
+			id := fmt.Sprintf("tf-%s-%s", resource.Type, resource.Name)
+
+			// Create instance
+			instance := model.NewInstance(id, attrs, model.OriginTerraform)
 			instances = append(instances, instance)
 		}
 	}
@@ -126,7 +149,7 @@ func (p *HCLParser) extractInstanceFromResource(resource TerraformConfigResource
 
 // extractAttributes extracts attributes from HCL body
 func (p *HCLParser) extractAttributes(body hcl.Body) (map[string]interface{}, error) {
-	// Define a schema for the attributes
+	// Define a schema for common EC2 instance attributes
 	schema := &hcl.BodySchema{
 		Attributes: []hcl.AttributeSchema{
 			{Name: "ami", Required: false},
@@ -139,8 +162,6 @@ func (p *HCLParser) extractAttributes(body hcl.Body) (map[string]interface{}, er
 			{Name: "ebs_optimized", Required: false},
 			{Name: "monitoring", Required: false},
 			{Name: "iam_instance_profile", Required: false},
-			{Name: "root_block_device", Required: false},
-			{Name: "ebs_block_device", Required: false},
 			{Name: "user_data", Required: false},
 			{Name: "user_data_base64", Required: false},
 		},
@@ -153,9 +174,9 @@ func (p *HCLParser) extractAttributes(body hcl.Body) (map[string]interface{}, er
 	}
 
 	// Extract content from body
-	content, _, diags := body.PartialContent(schema)
+	content, diags := body.Content(schema)
 	if diags.HasErrors() {
-		return nil, errors.NewOperationalError("Failed to extract attributes from HCL body", diags)
+		return nil, fmt.Errorf("failed to extract attributes: %s", diags.Error())
 	}
 
 	// Create evaluation context
@@ -169,22 +190,22 @@ func (p *HCLParser) extractAttributes(body hcl.Body) (map[string]interface{}, er
 		// Evaluate the expression
 		value, diags := attr.Expr.Value(evalCtx)
 		if diags.HasErrors() {
-			p.logger.Warn(fmt.Sprintf("Failed to evaluate attribute %s: %v", name, diags.Error()))
+			p.logger.Warn("Failed to evaluate attribute %s: %v", name, diags.Error())
 			continue
 		}
 
-		// Convert the value to Go type
-		attrs[name] = p.convertCtyValue(value)
+		// Convert the cty.Value to Go value
+		attrs[name] = convertCtyValue(value)
 	}
 
 	// Process blocks (like ebs_block_device)
 	for _, block := range content.Blocks {
 		blockType := block.Type
 
-		// Process the block content
-		blockAttrs, err := p.extractAttributes(block.Body)
+		// Process the block content recursively
+		blockAttrs, err := p.extractBlockAttributes(block)
 		if err != nil {
-			p.logger.Warn(fmt.Sprintf("Failed to extract attributes from block %s: %v", blockType, err))
+			p.logger.Warn("Failed to extract attributes from block %s: %v", blockType, err)
 			continue
 		}
 
@@ -204,6 +225,118 @@ func (p *HCLParser) extractAttributes(body hcl.Body) (map[string]interface{}, er
 	}
 
 	return attrs, nil
+}
+
+// extractBlockAttributes extracts attributes from an HCL block
+func (p *HCLParser) extractBlockAttributes(block *hcl.Block) (map[string]interface{}, error) {
+	// Extract all attributes from the block
+	attrs := make(map[string]interface{})
+
+	// Get block body content
+	content, diags := block.Body.Content(&hcl.BodySchema{
+		Attributes: []hcl.AttributeSchema{
+			// Define common attributes for different block types
+			{Name: "device_name", Required: false},
+			{Name: "volume_size", Required: false},
+			{Name: "volume_type", Required: false},
+			{Name: "iops", Required: false},
+			{Name: "delete_on_termination", Required: false},
+			{Name: "encrypted", Required: false},
+			{Name: "kms_key_id", Required: false},
+			{Name: "snapshot_id", Required: false},
+			// Add other attributes as needed for different block types
+		},
+		// Allow for nested blocks if needed
+		Blocks: []hcl.BlockHeaderSchema{},
+	})
+
+	if diags.HasErrors() {
+		return nil, fmt.Errorf("failed to extract block attributes: %s", diags.Error())
+	}
+
+	// Create evaluation context
+	evalCtx := &hcl.EvalContext{
+		Variables: map[string]cty.Value{},
+	}
+
+	// Extract attributes
+	for name, attr := range content.Attributes {
+		// Evaluate the expression
+		value, diags := attr.Expr.Value(evalCtx)
+		if diags.HasErrors() {
+			p.logger.Warn("Failed to evaluate block attribute %s: %v", name, diags.Error())
+			continue
+		}
+
+		// Convert the cty.Value to Go value
+		attrs[name] = convertCtyValue(value)
+	}
+
+	return attrs, nil
+}
+
+// convertCtyValue converts a cty.Value to a Go value
+func convertCtyValue(value cty.Value) interface{} {
+	// Handle null values
+	if value.IsNull() {
+		return nil
+	}
+
+	// Handle unknown values
+	if !value.IsKnown() {
+		return nil
+	}
+
+	// Handle different types
+	switch {
+	case value.Type() == cty.String:
+		return value.AsString()
+	case value.Type() == cty.Number:
+		f, _ := value.AsBigFloat().Float64()
+		return f
+	case value.Type() == cty.Bool:
+		return value.True()
+	case value.Type().IsMapType():
+		return convertCtyMap(value)
+	case value.Type().IsListType() || value.Type().IsSetType():
+		return convertCtyList(value)
+	case value.Type().IsTupleType():
+		return convertCtyList(value)
+	case value.Type().IsObjectType():
+		return convertCtyMap(value)
+	default:
+		return value.GoString()
+	}
+}
+
+// convertCtyMap converts a cty map or object to a Go map
+func convertCtyMap(value cty.Value) map[string]interface{} {
+	result := make(map[string]interface{})
+
+	if value.IsNull() || !value.IsKnown() {
+		return result
+	}
+
+	for k, v := range value.AsValueMap() {
+		result[k] = convertCtyValue(v)
+	}
+
+	return result
+}
+
+// convertCtyList converts a cty list, set, or tuple to a Go slice
+func convertCtyList(value cty.Value) []interface{} {
+	result := make([]interface{}, 0)
+
+	if value.IsNull() || !value.IsKnown() {
+		return result
+	}
+
+	for _, v := range value.AsValueSlice() {
+		result = append(result, convertCtyValue(v))
+	}
+
+	return result
 }
 
 // convertCtyValue converts a cty.Value to a Go value
