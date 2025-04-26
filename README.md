@@ -389,15 +389,16 @@ terraform-drift-detector/
 ---
 
 ### Approach
- - Interface-driven design for testability
- - Parallelized drift checks using errgroup
+ - Domain driven design with the core domain as "drift detection"
+ - Comprehensive error system and management
+ - Flexible configuration management
+ - SOLID implementation
  - Consistent DriftResult model for easy formatting
  - JSON-encoded reports for downstream processing
 
 ### Trade-Offs
- - Uses Go stdlib flag instead of cobra for simplicity
  - Limited to EC2 drift only for now (no ELBs, RDS, etc.)
- - Fails to parse HCL configs with variables
+ - Implemented an in-memory repository for drift results (persistence over performance)
 
 ### ⚠️ Challenges Faced
  - Issues parsing HCL configurations which use variables
@@ -407,12 +408,12 @@ terraform-drift-detector/
  - Balancing concurrency with predictable logging and output
 
 ### 🚀 Future Improvements
- - Add support for HCL .tf parsing with variables
+ - Implement persistent storage for drift results to enable historical tracking and trend analysis
  - Extend drift detection to other AWS resources (e.g., S3, RDS)
- - Use cobra or urfave/cli for multi-command CLI (scan, report, etc.)
- - Upload reports to S3 or Slack webhook
- - Web-based dashboard for viewing drift results over time
- - GitHub Actions integration for CI-based drift detection
+ - Implement integrations with notification systems for automated alerts.
+ - Add capability to suggest Terraform commands to resolve detected drift.
+ - Support distributed operation for very large infrastructures, perhaps using a work queue.
+ - Add encryption, authentication, and authorization for secure enterprise deployment.
 
 ---
 
