@@ -8,3 +8,6 @@ volume
 terraform.tfstate*
 coverage.out
 tfplan
+.DS_Store
+coverage.html
+*.txt

@@ -2,12 +2,30 @@ services:
   localstack:
     image: localstack/localstack
     ports:
-      - "127.0.0.1:4566:4566"            # LocalStack Gateway
-      - "127.0.0.1:4510-4559:4510-4559"  # external services port range
+      - "127.0.0.1:4566:4566" # LocalStack Gateway
+      - "127.0.0.1:4510-4559:4510-4559" # external services port range
     environment:
       # LocalStack configuration: https://docs.localstack.cloud/references/configuration/
       - DEBUG=${DEBUG:-0}
     volumes:
       - "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
       - "/var/run/docker.sock:/var/run/docker.sock"
-      
+
+  ec2-drift-detector:
+    container_name: ec2-drift-detector
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - localstack
+    environment:
+      - DRIFT_AWS_REGION=eu-north-1
+      - DRIFT_AWS_ENDPOINT=http://localstack:4566
+      - DRIFT_AWS_USE_LOCALSTACK=true
+      - DRIFT_APP_LOG_LEVEL=DEBUG
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - ./:/app
+      - ~/.aws:/root/.aws:ro
+    command: ["server"]

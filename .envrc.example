@@ -1,14 +1,34 @@
-export APP=ec2-drift-detector
-export CONCURRENT=true
-export LOG_LEVEL=debug
+export APP_NAME=ec2-drift-detector
 
-export AWS_ACCESS_KEY_ID=
-export AWS_SECRET_ACCESS_KEY=
-export AWS_DEFAULT_REGION=
-export AWS_EC2_ENDPOINT=http://localhost:4566
-export TERRAFORM_STATE_FILE=terraform/terraform.tfstate
+export DRIFT_APP_ENV=development
+export DRIFT_APP_LOG_LEVEL=DEBUG
+export DRIFT_APP_SCHEDULE_EXPRESSION="*/10 * * * *"
 
-export TF_VAR_aws_access_key_id=${AWS_ACCESS_KEY_ID}
-export TF_VAR_aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}
-export TF_VAR_aws_default_region=${AWS_DEFAULT_REGION}
-export TF_VAR_ec2_endpoint=${AWS_EC2_ENDPOINT}
+export DRIFT_AWS_DEFAULT_REGION=
+export DRIFT_AWS_ACCESS_KEY_ID=
+export DRIFT_AWS_SECRET_ACCESS_KEY=
+export DRIFT_AWS_PROFILE=
+export DRIFT_AWS_ENDPOINT=http://localhost:4566
+
+# Terraform Configuration
+export DRIFT_TERRAFORM_STATE_FILE=terraform/terraform.tfstate
+# or for HCL (YOU CAN ONLY USE EITHER ONE)
+# export DRIFT_TERRAFORM_HCL_DIR=./terraform
+# export DRIFT_TERRAFORM_USE_HCL=true
+
+
+export TF_VAR_aws_access_key_id=${DRIFT_AWS_ACCESS_KEY_ID}
+export TF_VAR_aws_secret_access_key=${DRIFT_AWS_SECRET_ACCESS_KEY}
+export TF_VAR_aws_default_region=${DRIFT_AWS_DEFAULT_REGION}
+export TF_VAR_ec2_endpoint=${DRIFT_AWS_ENDPOINT}
+
+# Drift Detection Configuration
+export DRIFT_DETECTOR_SOURCE_OF_TRUTH=terraform
+export DRIFT_DETECTOR_ATTRIBUTES=instance_type,ami,vpc_security_group_ids,tags
+export DRIFT_DETECTOR_PARALLEL_CHECKS=5
+export DRIFT_DETECTOR_TIMEOUT_SECONDS=60
+
+# Reporter Configuration
+export DRIFT_REPORTER_TYPE=console
+export DRIFT_REPORTER_OUTPUT_FILE=./drift-report.json
+export DRIFT_REPORTER_PRETTY_PRINT=true
