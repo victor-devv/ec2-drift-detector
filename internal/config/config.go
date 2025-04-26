@@ -22,7 +22,7 @@ type Config struct {
 	} `mapstructure:"app"`
 
 	AWS struct {
-		DefaultRegion   string `mapstructure:"region"`
+		Region          string `mapstructure:"region"`
 		AccessKeyID     string `mapstructure:"access_key_id"`
 		SecretAccessKey string `mapstructure:"secret_access_key"`
 		Profile         string `mapstructure:"profile"`
@@ -42,7 +42,7 @@ type Config struct {
 		ParallelChecks int `mapstructure:"parallel_checks"`
 		// TimeoutSeconds is the timeout for drift detection operations
 		TimeoutSeconds int `mapstructure:"timeout_seconds"`
-	} `mapstructure:"drift_detection"`
+	} `mapstructure:"detector"`
 
 	// Reporter configuration
 	Reporter struct {
@@ -63,7 +63,7 @@ func (c *Config) Validate() error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if c.AWS.DefaultRegion == "" {
+	if c.AWS.Region == "" {
 		return errors.NewValidationError("AWS region cannot be empty")
 	}
 
