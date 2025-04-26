@@ -25,7 +25,7 @@ type TFResource struct {
 type TFResourceInstance struct {
 	IndexKey   interface{}            `json:"index_key"`
 	Status     string                 `json:"status"`
-	Schema     map[string]interface{} `json:"schema_version"`
+	Schema     int                    `json:"schema_version"`
 	Attributes map[string]interface{} `json:"attributes"`
 	Private    string                 `json:"private"`
 }

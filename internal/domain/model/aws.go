@@ -1,12 +1,14 @@
 package model
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/victor-devv/ec2-drift-detector/pkg/comparator"
 )
 
 // ResourceOrigin represents the source of a resource configuration
@@ -115,14 +117,30 @@ func CompareAttributes(source, target *Instance, attributePaths []string) map[st
 
 			// If both values exist, compare them
 			if !reflect.DeepEqual(sourceVal, targetVal) {
-				resultMutex.Lock()
-				result[attrPath] = AttributeDrift{
-					Path:        attrPath,
-					SourceValue: sourceVal,
-					TargetValue: targetVal,
-					Changed:     true,
+				if attrPath == "tags" {
+					comp := comparator.NewComparator()
+					tagDrifts := comp.CompareDeep(sourceVal, targetVal)
+					if len(tagDrifts) > 0 {
+						resultMutex.Lock()
+						result[attrPath] = AttributeDrift{
+							Path:        attrPath,
+							SourceValue: sourceVal,
+							TargetValue: targetVal,
+							Changed:     true,
+						}
+						resultMutex.Unlock()
+					}
+				} else {
+					resultMutex.Lock()
+					result[attrPath] = AttributeDrift{
+						Path:        attrPath,
+						SourceValue: sourceVal,
+						TargetValue: targetVal,
+						Changed:     true,
+					}
+					resultMutex.Unlock()
 				}
-				resultMutex.Unlock()
+
 			}
 		}(path)
 	}

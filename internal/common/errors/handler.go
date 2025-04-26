@@ -57,8 +57,8 @@ func (h *ErrorHandler) Handle(err error) {
 // handleSystemError handles system errors by logging and panicking
 func (h *ErrorHandler) handleSystemError(err *AppError) {
 	stackTrace := string(debug.Stack())
-	h.logger.Error("SYSTEM ERROR: %s (cause: %v)", err.Message, err.Cause)
-	h.logger.Error("Stack trace: %s", stackTrace)
+	h.logger.Error(fmt.Sprintf("SYSTEM ERROR: %s (cause: %v)", err.Message, err.Cause))
+	h.logger.Error(fmt.Sprintf("Stack trace: %s", stackTrace))
 
 	// System errors should cause application to panic
 	panic(fmt.Sprintf("System error: %s", err.Error()))
@@ -66,31 +66,31 @@ func (h *ErrorHandler) handleSystemError(err *AppError) {
 
 // handleOperationalError handles operational errors by logging
 func (h *ErrorHandler) handleOperationalError(err *AppError) {
-	h.logger.Error("OPERATIONAL ERROR: %s (cause: %v)", err.Message, err.Cause)
+	h.logger.Error(fmt.Sprintf("OPERATIONAL ERROR: %s (cause: %v)", err.Message, err.Cause))
 
 	// Log additional context if available
 	if len(err.Context) > 0 {
-		h.logger.Debug("Error context: %v", err.Context)
+		h.logger.Debug(fmt.Sprintf("Error context: %v", err.Context))
 	}
 }
 
 // handleValidationError handles validation errors
 func (h *ErrorHandler) handleValidationError(err *AppError) {
-	h.logger.Warn("VALIDATION ERROR: %s", err.Message)
+	h.logger.Warn(fmt.Sprintf("VALIDATION ERROR: %s", err.Message))
 
 	// Log additional context if available
 	if len(err.Context) > 0 {
-		h.logger.Debug("Validation context: %v", err.Context)
+		h.logger.Debug(fmt.Sprintf("Validation context: %v", err.Context))
 	}
 }
 
 // handleNotFoundError handles not found errors
 func (h *ErrorHandler) handleNotFoundError(err *AppError) {
-	h.logger.Info("NOT FOUND: %s", err.Message)
+	h.logger.Info(fmt.Sprintf("NOT FOUND: %s", err.Message))
 
 	// Log additional context if available
 	if len(err.Context) > 0 {
-		h.logger.Debug("Not found context: %v", err.Context)
+		h.logger.Debug(fmt.Sprintf("Not found context: %v", err.Context))
 	}
 }
 
