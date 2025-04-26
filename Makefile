@@ -1,73 +1,86 @@
-MAIN := cmd/drift-detector/main.go
-ATTRIBUTES := instance_type,tags,vpc_security_group_ids
-OUTPUT_FORMAT := json
-OUTPUT_FILE := drift_report.json
+.PHONY: build test test-report clean run run-binary localstack terraform docker-build docker-run tf-init tf-plan tf-apply
 
-.PHONY: run
-run:
-	go run $(MAIN) \
-		--state-file=$(TERRAFORM_STATE_FILE) \
-		--attributes=$(ATTRIBUTES) \
-		--output=$(OUTPUT_FORMAT) \
-		--output-file=$(OUTPUT_FILE)
+GOCMD=go
+GOBUILD=$(GOCMD) build
+GORUN=$(GOCMD) run
+GOCLEAN=$(GOCMD) clean
+GOTEST=$(GOCMD) test
+GOGET=$(GOCMD) get
+GOMOD=$(GOCMD) mod
+BINARY_NAME=drift-detector
+BINARY_UNIX=$(BINARY_NAME)_unix
+LDFLAGS=-ldflags "-X main.Version=0.1.0"
 
-.PHONY: build
+MAIN=cmd/drift-detector/main.go
+ATTRIBUTES=instance_type,tags,vpc_security_group_ids
+STATE_FILE=terraform/terraform.tfstate
+OUTPUT_FORMAT=json
+OUTPUT_FILE=drift_report.json
+
+DOCKER_IMAGE=ec2-drift-detector
+
+all: test build
+
 build:
-	go build -o $(APP_NAME) $(MAIN)
+	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) -v ./cmd/drift-detector
 
-.PHONY: docker-build
-docker-build:
-	docker build -t $(DOCKER_IMAGE) .
+test: 
+	$(GOTEST) -v -race -coverprofile=coverage.out ./...
+	$(GOCMD) tool cover -func=coverage.out
 
-.PHONY: docker-run
-docker-run:
-	set -a && source .envrc && set +a && docker run --rm \
-		-v $(PWD):/app \
-		-e CONCURRENT=$(CONCURRENT) \
-		-e LOG_LEVEL=$(LOG_LEVEL) \
-		-e AWS_DEFAULT_REGION=$(AWS_DEFAULT_REGION) \
-		-e AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) \
-		-e AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) \
-		-e AWS_EC2_ENDPOINT=$(AWS_EC2_ENDPOINT) \
-		-e TERRAFORM_STATE_FILE=$(TERRAFORM_STATE_FILE) \
-		$(APP) --state-file=$(TERRAFORM_STATE_FILE) --attributes=$(ATTRIBUTES)
+test-report:
+	$(GOTEST) ./... -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html
+	@echo "✔️  View coverage report at: coverage.html"
 
-.PHONY: localstack-up
+clean: 
+	$(GOCLEAN)
+	rm -f $(BINARY_NAME)
+	rm -f $(BINARY_UNIX)
+	rm -f coverage.out
+	rm -f coverage.html
+
+run:
+	$(GORUN) $(MAIN) --state-file=$(STATE_FILE) --attributes=$(ATTRIBUTES) --output=$(OUTPUT_FORMAT) --output-file=$(OUTPUT_FILE)
+
+run-binary:
+	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) -v ./cmd/drift-detector
+	./$(BINARY_NAME)
+
+# Manage dependencies
+deps:
+	$(GOMOD) tidy
+	$(GOMOD) download
+
+# Run localstack for development
 localstack-up:
-	docker-compose up -d
+	docker-compose up -d localstack
 
-.PHONY: localstack-down
 localstack-down:
 	docker-compose down
 
-.PHONY: tf-init
+docker-build:
+	docker build -t $(DOCKER_IMAGE) .
+docker-run:
+	docker run --rm -it $(DOCKER_IMAGE)
+
+# Start the complete stack with Docker Compose
+start:
+	docker-compose up -d
+
+stop:
+	docker-compose down
+
 tf-init:
 	cd terraform && terraform init
 
-.PHONY: tf-plan
 tf-plan:
 	cd terraform && terraform plan -var-file="config.tfvars" -out="tfplan"
 
-.PHONY: tf-apply
 tf-apply:
 	cd terraform && terraform apply tfplan -auto-approve
 
-.PHONY: tf-destroy
 tf-destroy:
 	cd terraform && terraform destroy -auto-approve
-
-.PHONY: test
-test:
-	go test ./... -v
-
-.PHONY: cover
-cover:
-	go test ./... -coverprofile=coverage.out && go tool cover -func=coverage.out
-
-.PHONY: cover-html
-cover-html:
-	go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html
-	@echo "✔️  View coverage report at: coverage.html"
 
 .PHONY: godoc-install
 godoc-install:

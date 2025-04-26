@@ -10,24 +10,30 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
-	"github.com/victor-devv/ec2-drift-detector/internal/aws"
-	"github.com/victor-devv/ec2-drift-detector/internal/cli"
+	"github.com/victor-devv/ec2-drift-detector/internal/app"
+	"github.com/victor-devv/ec2-drift-detector/internal/common/errors"
+	"github.com/victor-devv/ec2-drift-detector/internal/common/logging"
 	"github.com/victor-devv/ec2-drift-detector/internal/config"
-	"github.com/victor-devv/ec2-drift-detector/internal/detector"
-	"github.com/victor-devv/ec2-drift-detector/internal/models"
-	"github.com/victor-devv/ec2-drift-detector/internal/reporter"
-	"github.com/victor-devv/ec2-drift-detector/internal/terraform"
-	"github.com/victor-devv/ec2-drift-detector/pkg/logger"
+	"github.com/victor-devv/ec2-drift-detector/internal/domain/model"
+	"github.com/victor-devv/ec2-drift-detector/internal/domain/service"
+	"github.com/victor-devv/ec2-drift-detector/internal/infrastructure/aws"
+	"github.com/victor-devv/ec2-drift-detector/internal/infrastructure/repository"
+	"github.com/victor-devv/ec2-drift-detector/internal/infrastructure/terraform"
+	"github.com/victor-devv/ec2-drift-detector/internal/presentation/cli"
+	"github.com/victor-devv/ec2-drift-detector/internal/presentation/reporter"
 )
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatal(err)
+		// Create error handler
+		logger := logging.New()
+		errorHandler := errors.NewErrorHandler(logger)
+		errorHandler.HandleWithExit(err)
 	}
 }
 
@@ -36,67 +42,87 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	cfg, err := config.New()
+	// Initialize logger
+	logger := logging.New()
+
+	// Load configuration
+	configLoader := config.NewConfigLoader(logger, ".")
+	cfg, err := configLoader.Load()
 	if err != nil {
-		return fmt.Errorf("failed to load configuration: %v", err)
+		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	logger := logger.New(cfg)
-
-	app := cli.NewCLI(cfg, logger)
-	if err := app.Parse(os.Args[1:]); err != nil {
-		return err
-	}
-
-	// refresh config
-	cfg = app.Config()
-	app.LogStartupInfo(ctx)
-
-	awsClient, err := aws.NewClient(ctx, cfg, logger)
+	// Initialize AWS client
+	awsClient, err := aws.NewClient(ctx, aws.ClientConfig{
+		Region:        cfg.AWS.Region,
+		Profile:       cfg.AWS.Profile,
+		AccessKey:     cfg.AWS.AccessKeyID,
+		SecretKey:     cfg.AWS.SecretAccessKey,
+		Endpoint:      cfg.AWS.Endpoint,
+		UseLocalstack: strings.ToLower(cfg.App.Env) == "dev" || strings.ToLower(cfg.App.Env) == "development",
+	}, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create AWS client: %w", err)
 	}
 
-	ec2Client := aws.NewEC2Client(awsClient, cfg, logger)
+	// Initialize EC2 service
+	ec2Service := aws.NewEC2Service(logger, awsClient)
 
-	tfParser, err := terraform.GetParser(logger, cfg.Terraform.StateFile)
+	// Initialize Terraform client
+	terraformClient, err := terraform.NewClient(terraform.ClientConfig{
+		StateFile: cfg.Terraform.StateFile,
+		HCLDir:    cfg.Terraform.HCLDir,
+		UseHCL:    cfg.Terraform.UseHCL,
+	}, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create Terraform parser: %w", err)
 	}
 
-	ec2Detector := detector.NewEC2Detector(*ec2Client, tfParser, logger)
+	// Initialize repository
+	driftRepo := repository.NewInMemoryDriftRepository(logger)
 
-	// Detect drift
-	var results []models.DriftResult
-	if cfg.Concurrent {
-		logger.Info("Running concurrent drift detection")
-		results, err = ec2Detector.DetectDriftConcurrent(ctx, cfg.Detector.Attributes)
-	} else {
-		logger.Info("Running sequential drift detection")
-		results, err = ec2Detector.DetectDrift(ctx, cfg.Detector.Attributes)
-	}
-	if err != nil {
-		return fmt.Errorf("drift detection failed: %w", err)
-	}
+	// Initialize reporters
+	var reporters []service.Reporter
 
-	// Initialize reporter
-	var rep reporter.Reporter
-	switch cfg.Detector.OutputFormat {
+	switch cfg.Reporter.Type {
+	case "console":
+		reporters = append(reporters, reporter.NewConsoleReporter(logger))
 	case "json":
-		if cfg.Detector.OutputFile != "" {
-			rep = reporter.NewJSONReporter(logger).WithOutputFile(cfg.Detector.OutputFile)
-		} else {
-			rep = reporter.NewJSONReporter(logger)
-		}
+		reporters = append(reporters, reporter.NewJSONReporter(logger, cfg.Reporter.OutputFile))
+	case "both":
+		reporters = append(reporters, reporter.NewConsoleReporter(logger))
+		reporters = append(reporters, reporter.NewJSONReporter(logger, cfg.Reporter.OutputFile))
 	default:
-		rep = reporter.NewConsoleReporter(logger)
+		logger.Warn("Unknown reporter type: %s, using console reporter", cfg.Reporter.Type)
+		reporters = append(reporters, reporter.NewConsoleReporter(logger))
 	}
 
-	if err := rep.Report(ctx, results); err != nil {
-		return fmt.Errorf("reporting failed: %w", err)
-	}
+	// Initialize drift detector service
+	driftDetector := app.NewDriftDetectorService(
+		ec2Service,
+		terraformClient,
+		driftRepo,
+		reporters,
+		app.DriftDetectorConfig{
+			SourceOfTruth:      model.ResourceOrigin(cfg.Detector.SourceOfTruth),
+			AttributePaths:     cfg.Detector.Attributes,
+			ParallelChecks:     cfg.Detector.ParallelChecks,
+			Timeout:            time.Duration(cfg.Detector.TimeoutSeconds) * time.Second,
+			ScheduleExpression: cfg.App.ScheduleExpression,
+		},
+		logger,
+	)
 
-	logger.Info("Drift detection completed")
+	// Initialize application
+	application := app.NewApplication(driftDetector)
+
+	// Initialize CLI handler
+	cliHandler := cli.NewHandler(application, configLoader, cfg, logger)
+
+	// Execute CLI
+	if err := cliHandler.Execute(); err != nil {
+		return err
+	}
 
 	return nil
 }
