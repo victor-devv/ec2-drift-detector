@@ -2,6 +2,7 @@ package model
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,22 +60,59 @@ func (i *Instance) GetAttribute(path string) (interface{}, bool) {
 }
 
 // GetNestedValue retrieves a value from a nested map structure using dot notation
+// func GetNestedValue(data map[string]interface{}, path string) (interface{}, bool) {
+// 	parts := strings.Split(path, ".")
+// 	fmt.Println(parts)
+
+// 	var current interface{} = data
+
+// 	for _, part := range parts {
+// 		// Handle array indexing if needed
+// 		// For simplicity, this implementation doesn't handle array indices
+
+// 		m, ok := current.(map[string]interface{})
+// 		if !ok {
+// 			return nil, false
+// 		}
+
+// 		current, ok = m[part]
+// 		if !ok {
+// 			return nil, false
+// 		}
+// 	}
+
+// 	return current, true
+// }
+
 func GetNestedValue(data map[string]interface{}, path string) (interface{}, bool) {
 	parts := strings.Split(path, ".")
-
 	var current interface{} = data
 
 	for _, part := range parts {
-		// Handle array indexing if needed
-		// For simplicity, this implementation doesn't handle array indices
+		switch curr := current.(type) {
 
-		m, ok := current.(map[string]interface{})
-		if !ok {
-			return nil, false
-		}
+		case map[string]interface{}:
+			val, ok := curr[part]
+			if !ok {
+				return nil, false
+			}
+			current = val
 
-		current, ok = m[part]
-		if !ok {
+		case map[string]string:
+			val, ok := curr[part]
+			if !ok {
+				return nil, false
+			}
+			current = val
+
+		case []interface{}:
+			index, err := strconv.Atoi(part)
+			if err != nil || index < 0 || index >= len(curr) {
+				return nil, false
+			}
+			current = curr[index]
+
+		default:
 			return nil, false
 		}
 	}
