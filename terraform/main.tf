@@ -62,3 +62,17 @@ resource "aws_instance" "sample_instance" {
     Env  = "dev"
   }
 }
+
+resource "aws_instance" "sample_instance_2" {
+  ami           = "ami-12345678"
+  instance_type = "t2.micro"
+  key_name      = "TestKey"
+  subnet_id              = aws_subnet.sample_subnet.id
+  vpc_security_group_ids = [aws_security_group.sample_sg.id]
+
+  tags = {
+    Name = "LocalStack EC2 2"
+    Env  = "dev"
+    Project     = "DriftDetector"
+  }
+}

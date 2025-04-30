@@ -4,10 +4,10 @@ export DRIFT_APP_ENV=development
 export DRIFT_APP_LOG_LEVEL=DEBUG
 export DRIFT_APP_SCHEDULE_EXPRESSION="*/10 * * * *"
 
-export DRIFT_AWS_DEFAULT_REGION=
-export DRIFT_AWS_ACCESS_KEY_ID=
-export DRIFT_AWS_SECRET_ACCESS_KEY=
-export DRIFT_AWS_PROFILE=
+export DRIFT_AWS_REGION=eu-north-1
+export DRIFT_AWS_ACCESS_KEY_ID=dummy
+export DRIFT_AWS_SECRET_ACCESS_KEY=dummy
+# export DRIFT_AWS_PROFILE=
 export DRIFT_AWS_ENDPOINT=http://localhost:4566
 
 # Terraform Configuration
@@ -19,7 +19,7 @@ export DRIFT_TERRAFORM_STATE_FILE=terraform/terraform.tfstate
 
 export TF_VAR_aws_access_key_id=${DRIFT_AWS_ACCESS_KEY_ID}
 export TF_VAR_aws_secret_access_key=${DRIFT_AWS_SECRET_ACCESS_KEY}
-export TF_VAR_aws_default_region=${DRIFT_AWS_DEFAULT_REGION}
+export TF_VAR_aws_default_region=${DRIFT_AWS_REGION}
 export TF_VAR_ec2_endpoint=${DRIFT_AWS_ENDPOINT}
 
 # Drift Detection Configuration

@@ -1,4 +1,4 @@
-.PHONY: build test test-report clean run run-binary localstack terraform docker-build docker-run tf-init tf-plan tf-apply
+.PHONY: build test test-report clean run run-binary run-binary-server run-binary-config-show run-binary-config-reload run-config-show run-config-reload run-server localstack terraform docker-build docker-run tf-init tf-plan tf-apply
 
 GOCMD=go
 GOBUILD=$(GOCMD) build
@@ -40,11 +40,32 @@ clean:
 	rm -f coverage.html
 
 run:
-	$(GORUN) $(MAIN) --state-file=$(STATE_FILE) --attributes=$(ATTRIBUTES) --output=$(OUTPUT_FORMAT) --output-file=$(OUTPUT_FILE)
+	$(GORUN) $(MAIN) detect --state-file=$(STATE_FILE) --attributes=$(ATTRIBUTES) --output=$(OUTPUT_FORMAT) --output-file=$(OUTPUT_FILE)
+
+run-config-show:
+	$(GORUN) $(MAIN) config show
+
+run-config-reload:
+	$(GORUN) $(MAIN) config reload
+
+run-server:
+	$(GORUN) $(MAIN) server
 
 run-binary:
 	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) -v ./cmd/drift-detector
 	./$(BINARY_NAME) detect --state-file=$(STATE_FILE) --attributes=$(ATTRIBUTES) --output=$(OUTPUT_FORMAT) --output-file=$(OUTPUT_FILE)
+
+run-binary-server:
+	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) -v ./cmd/drift-detector
+	./$(BINARY_NAME) server
+
+run-binary-config-show:
+	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) -v ./cmd/drift-detector
+	./$(BINARY_NAME) config show
+
+run-binary-config-reload:
+	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) -v ./cmd/drift-detector
+	./$(BINARY_NAME) config reload
 
 # Manage dependencies
 deps:
@@ -60,6 +81,7 @@ localstack-down:
 
 docker-build:
 	docker build -t $(DOCKER_IMAGE) .
+	
 docker-run:
 	docker run --rm -it $(DOCKER_IMAGE)
 

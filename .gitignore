@@ -11,3 +11,6 @@ tfplan
 .DS_Store
 coverage.html
 *.txt
+drift_report*.json
+report*.json
+drift-detector
