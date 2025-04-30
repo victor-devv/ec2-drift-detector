@@ -9,188 +9,330 @@ import (
 )
 
 // Config holds all application configuration
+// All fields are private and accessed via methods only
 type Config struct {
-	// General application configuration
-	App struct {
-		Env string `mapstructure:"env"`
+	app       appConfig
+	aws       awsConfig
+	terraform terraformConfig
+	detector  detectorConfig
+	reporter  reporterConfig
 
-		LogLevel logging.LogLevel `mapstructure:"log_level"`
-		// JSONLogs indicates whether to output logs in JSON format
-		JSONLogs bool `mapstructure:"json_logs"`
-		// ScheduleExpression is the cron expression for scheduled drift checks
-		ScheduleExpression string `mapstructure:"schedule_expression"`
-	} `mapstructure:"app"`
-
-	AWS struct {
-		Region          string `mapstructure:"region"`
-		AccessKeyID     string `mapstructure:"access_key_id"`
-		SecretAccessKey string `mapstructure:"secret_access_key"`
-		Profile         string `mapstructure:"profile"`
-		Endpoint        string `mapstructure:"endpoint"`
-	} `mapstructure:"aws"`
-
-	Terraform struct {
-		StateFile string `mapstructure:"state_file"`
-		HCLDir    string `mapstructure:"hcl_dir"`
-		UseHCL    bool   `mapstructure:"use_hcl"`
-	} `mapstructure:"terraform"`
-
-	Detector struct {
-		Attributes    []string `mapstructure:"attributes"`
-		SourceOfTruth string   `mapstructure:"source_of_truth"`
-		// ParallelChecks is the number of parallel checks to run
-		ParallelChecks int `mapstructure:"parallel_checks"`
-		// TimeoutSeconds is the timeout for drift detection operations
-		TimeoutSeconds int `mapstructure:"timeout_seconds"`
-	} `mapstructure:"detector"`
-
-	// Reporter configuration
-	Reporter struct {
-		// Type is the type of reporter to use (json, console, or both)
-		Type string `mapstructure:"type"`
-		// OutputFile is the path to the output file for JSON reporter
-		OutputFile string `mapstructure:"output_file"`
-		// PrettyPrint indicates whether to format JSON output
-		PrettyPrint bool `mapstructure:"pretty_print"`
-	} `mapstructure:"reporter"`
-
-	// mutex for thread safety
 	mu sync.RWMutex
 }
 
-// Validate validates the configuration
+type appConfig struct {
+	env                string
+	logLevel           logging.LogLevel
+	jsonLogs           bool
+	scheduleExpression string
+}
+
+type awsConfig struct {
+	region          string
+	accessKeyID     string
+	secretAccessKey string
+	profile         string
+	endpoint        string
+}
+
+type terraformConfig struct {
+	stateFile string
+	hclDir    string
+	useHCL    bool
+}
+
+type detectorConfig struct {
+	attributes     []string
+	sourceOfTruth  string
+	parallelChecks int
+	timeoutSeconds int
+}
+
+type reporterConfig struct {
+	typeVal     string
+	outputFile  string
+	prettyPrint bool
+}
+
+// ------- App Getters/Setters -------
+func (c *Config) GetEnv() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.app.env
+}
+
+func (c *Config) SetEnv(env string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.app.env = env
+}
+
+func (c *Config) GetLogLevel() logging.LogLevel {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.app.logLevel
+}
+
+func (c *Config) SetLogLevel(level logging.LogLevel) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.app.logLevel = level
+}
+
+func (c *Config) GetJSONLogs() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.app.jsonLogs
+}
+
+func (c *Config) SetJSONLogs(val bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.app.jsonLogs = val
+}
+
+func (c *Config) GetScheduleExpression() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.app.scheduleExpression
+}
+
+func (c *Config) SetScheduleExpression(expr string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.app.scheduleExpression = expr
+}
+
+// ------- AWS Getters/Setters -------
+func (c *Config) GetAWSRegion() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.aws.region
+}
+
+func (c *Config) SetAWSRegion(region string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.aws.region = region
+}
+
+func (c *Config) GetAWSAccessKeyID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.aws.accessKeyID
+}
+
+func (c *Config) SetAWSAccessKeyID(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.aws.accessKeyID = key
+}
+
+func (c *Config) GetAWSSecretAccessKey() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.aws.secretAccessKey
+}
+
+func (c *Config) SetAWSSecretAccessKey(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.aws.secretAccessKey = key
+}
+
+func (c *Config) GetAWSProfile() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.aws.profile
+}
+
+func (c *Config) SetAWSProfile(profile string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.aws.profile = profile
+}
+
+func (c *Config) GetAWSEndpoint() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.aws.endpoint
+}
+
+func (c *Config) SetAWSEndpoint(endpoint string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.aws.endpoint = endpoint
+}
+
+// ------- Terraform Getters/Setters -------
+func (c *Config) GetStateFile() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.terraform.stateFile
+}
+
+func (c *Config) SetStateFile(file string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.terraform.stateFile = file
+}
+
+func (c *Config) GetUseHCL() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.terraform.useHCL
+}
+
+func (c *Config) SetUseHCL(val bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.terraform.useHCL = val
+}
+
+func (c *Config) GetHCLDir() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.terraform.hclDir
+}
+
+func (c *Config) SetHCLDir(val string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.terraform.hclDir = val
+}
+
+// ------- Detector Getters/Setters -------
+func (c *Config) GetSourceOfTruth() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.detector.sourceOfTruth
+}
+
+func (c *Config) SetSourceOfTruth(val string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.detector.sourceOfTruth = val
+}
+
+func (c *Config) GetAttributes() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.detector.attributes
+}
+
+func (c *Config) SetAttributes(val []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.detector.attributes = val
+}
+
+func (c *Config) GetParallelChecks() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.detector.parallelChecks
+}
+
+func (c *Config) SetParallelChecks(val int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.detector.parallelChecks = val
+}
+
+func (c *Config) GetTimeout() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return time.Duration(c.detector.timeoutSeconds) * time.Second
+}
+
+func (c *Config) SetTimeout(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.detector.timeoutSeconds = int(d.Seconds())
+}
+
+// ------- Reporter Getters/Setters -------
+func (c *Config) GetReporterType() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.reporter.typeVal
+}
+
+func (c *Config) SetReporterType(val string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.reporter.typeVal = val
+}
+
+func (c *Config) GetOutputFile() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.reporter.outputFile
+}
+
+func (c *Config) SetOutputFile(val string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.reporter.outputFile = val
+}
+
+func (c *Config) GetPrettyPrint() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.reporter.prettyPrint
+}
+
+func (c *Config) SetPrettyPrint(val bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.reporter.prettyPrint = val
+}
+
+// ------- Validation -------
 func (c *Config) Validate() error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if c.AWS.Region == "" {
+	if c.aws.region == "" {
 		return errors.NewValidationError("AWS region cannot be empty")
 	}
 
-	if c.Terraform.UseHCL {
-		if c.Terraform.HCLDir == "" {
+	if c.terraform.useHCL {
+		if c.terraform.hclDir == "" {
 			return errors.NewValidationError("Terraform HCL directory cannot be empty when UseHCL is true")
 		}
 	} else {
-		if c.Terraform.StateFile == "" {
+		if c.terraform.stateFile == "" {
 			return errors.NewValidationError("Terraform state file cannot be empty when UseHCL is false")
 		}
 	}
 
-	if len(c.Detector.Attributes) == 0 {
+	if len(c.detector.attributes) == 0 {
 		return errors.NewValidationError("At least one attribute must be specified for drift detection")
 	}
 
-	if c.Detector.SourceOfTruth != "aws" && c.Detector.SourceOfTruth != "terraform" {
+	if c.detector.sourceOfTruth != "aws" && c.detector.sourceOfTruth != "terraform" {
 		return errors.NewValidationError("Source of truth must be either 'aws' or 'terraform'")
 	}
 
-	if c.Detector.ParallelChecks <= 0 {
+	if c.detector.parallelChecks <= 0 {
 		return errors.NewValidationError("Parallel checks must be greater than 0")
 	}
 
-	if c.Detector.TimeoutSeconds <= 0 {
+	if c.detector.timeoutSeconds <= 0 {
 		return errors.NewValidationError("Timeout seconds must be greater than 0")
 	}
 
-	if c.Reporter.Type != "json" && c.Reporter.Type != "console" && c.Reporter.Type != "both" {
+	if c.reporter.typeVal != ReporterTypeConsole && c.reporter.typeVal != ReporterTypeJSON && c.reporter.typeVal != ReporterTypeBoth {
 		return errors.NewValidationError("Reporter type must be 'json', 'console', or 'both'")
 	}
 
-	if (c.Reporter.Type == "json" || c.Reporter.Type == "both") && c.Reporter.OutputFile == "" {
+	if (c.reporter.typeVal == ReporterTypeJSON || c.reporter.typeVal == ReporterTypeBoth) && c.reporter.outputFile == "" {
 		return errors.NewValidationError("Output file must be specified for JSON reporter")
 	}
 
-	// Validate schedule expression if provided
-	if c.App.ScheduleExpression != "" {
-		if len(c.App.ScheduleExpression) < 9 { // Minimum valid cron is "* * * * *"
-			return errors.NewValidationError("Invalid schedule expression format")
-		}
+	if c.app.scheduleExpression != "" && len(c.app.scheduleExpression) < 9 {
+		return errors.NewValidationError("Invalid schedule expression format")
 	}
 
 	return nil
-}
-
-// GetSourceOfTruth returns the source of truth configuration
-func (c *Config) GetSourceOfTruth() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.Detector.SourceOfTruth
-}
-
-// SetSourceOfTruth sets the source of truth configuration
-func (c *Config) SetSourceOfTruth(sourceOfTruth string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.Detector.SourceOfTruth = sourceOfTruth
-}
-
-// GetAttributes returns the attributes to check for drift
-func (c *Config) GetAttributes() []string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.Detector.Attributes
-}
-
-// SetAttributes sets the attributes to check for drift
-func (c *Config) SetAttributes(attributes []string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.Detector.Attributes = attributes
-}
-
-// GetParallelChecks returns the number of parallel checks to run
-func (c *Config) GetParallelChecks() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.Detector.ParallelChecks
-}
-
-// SetParallelChecks sets the number of parallel checks to run
-func (c *Config) SetParallelChecks(parallelChecks int) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.Detector.ParallelChecks = parallelChecks
-}
-
-// GetTimeout returns the timeout for drift detection operations
-func (c *Config) GetTimeout() time.Duration {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return time.Duration(c.Detector.TimeoutSeconds) * time.Second
-}
-
-// SetTimeout sets the timeout for drift detection operations
-func (c *Config) SetTimeout(timeout time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.Detector.TimeoutSeconds = int(timeout.Seconds())
-}
-
-// GetReporterType returns the reporter type
-func (c *Config) GetReporterType() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.Reporter.Type
-}
-
-// SetReporterType sets the reporter type
-func (c *Config) SetReporterType(reporterType string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.Reporter.Type = reporterType
-}
-
-// GetScheduleExpression returns the schedule expression
-func (c *Config) GetScheduleExpression() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.App.ScheduleExpression
-}
-
-// SetScheduleExpression sets the schedule expression
-func (c *Config) SetScheduleExpression(expression string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.App.ScheduleExpression = expression
 }

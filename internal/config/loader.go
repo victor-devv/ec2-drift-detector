@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/spf13/viper"
 	"github.com/victor-devv/ec2-drift-detector/internal/common/errors"
@@ -20,6 +21,42 @@ type ConfigLoader struct {
 	logger    *logging.Logger
 	configDir string
 	mu        sync.Mutex
+}
+
+type rawConfig struct {
+	App struct {
+		Env                string `mapstructure:"env"`
+		LogLevel           string `mapstructure:"log_level"`
+		JSONLogs           bool   `mapstructure:"json_logs"`
+		ScheduleExpression string `mapstructure:"schedule_expression"`
+	} `mapstructure:"app"`
+
+	AWS struct {
+		Region          string `mapstructure:"region"`
+		AccessKeyID     string `mapstructure:"access_key_id"`
+		SecretAccessKey string `mapstructure:"secret_access_key"`
+		Profile         string `mapstructure:"profile"`
+		Endpoint        string `mapstructure:"endpoint"`
+	} `mapstructure:"aws"`
+
+	Terraform struct {
+		StateFile string `mapstructure:"state_file"`
+		HCLDir    string `mapstructure:"hcl_dir"`
+		UseHCL    bool   `mapstructure:"use_hcl"`
+	} `mapstructure:"terraform"`
+
+	Detector struct {
+		Attributes     []string `mapstructure:"attributes"`
+		SourceOfTruth  string   `mapstructure:"source_of_truth"`
+		ParallelChecks int      `mapstructure:"parallel_checks"`
+		TimeoutSeconds int      `mapstructure:"timeout_seconds"`
+	} `mapstructure:"detector"`
+
+	Reporter struct {
+		Type        string `mapstructure:"type"`
+		OutputFile  string `mapstructure:"output_file"`
+		PrettyPrint bool   `mapstructure:"pretty_print"`
+	} `mapstructure:"reporter"`
 }
 
 // NewConfigLoader creates a new config loader
@@ -57,19 +94,19 @@ func (l *ConfigLoader) Load() (*Config, error) {
 	// Load from environment variables
 	l.loadFromEnv()
 
-	if err := l.viper.Unmarshal(l.config); err != nil {
+	var raw rawConfig
+	if err := l.viper.Unmarshal(&raw); err != nil {
 		return nil, errors.NewSystemError("Failed to unmarshal configuration", err)
 	}
-
-	// if err := l.config.Validate(); err != nil {
-	// 	return nil, err
-	// }
+	applyRawToConfig(raw, l.config)
 
 	// Set up logging based on configuration
 	logging.ConfigureLogger(logging.LogConfig{
-		Level:      l.config.App.LogLevel,
-		JSONFormat: l.config.App.JSONLogs,
+		Level:      l.config.app.logLevel,
+		JSONFormat: l.config.app.jsonLogs,
 	})
+
+	l.logger.Info("Configuration loaded successfully")
 
 	return l.config, nil
 }
@@ -79,13 +116,13 @@ func (l *ConfigLoader) setDefaults() {
 	v := l.viper
 
 	// App defaults
-	v.SetDefault("app.env", "Dev")
-	v.SetDefault("app.log_level", "INFO")
+	v.SetDefault("app.env", AppEnvDev)
+	v.SetDefault("app.log_level", LogLevelInfo)
 	v.SetDefault("app.json_logs", false)
-	v.SetDefault("app.schedule_expression", "0 */6 * * *") // Run every 6 hours by default
+	v.SetDefault("app.schedule_expression", cronEvery6Hours) // Run every 6 hours by default
 
 	// AWS defaults
-	v.SetDefault("aws.region", "eu-north-1")
+	v.SetDefault("aws.region", aWSDefaultRegion)
 	v.SetDefault("aws.access_key_id", "")
 	v.SetDefault("aws.secret_access_key", "")
 	v.SetDefault("aws.profile", "")
@@ -98,12 +135,12 @@ func (l *ConfigLoader) setDefaults() {
 
 	// DriftDetection defaults
 	v.SetDefault("detector.attributes", []string{"instance_type", "ami", "vpc_security_group_ids", "tags"})
-	v.SetDefault("detector.source_of_truth", "terraform")
+	v.SetDefault("detector.source_of_truth", defaultSourceOfTruth)
 	v.SetDefault("detector.parallel_checks", 5)
 	v.SetDefault("detector.timeout_seconds", 60)
 
 	// Reporter defaults
-	v.SetDefault("reporter.type", "console")
+	v.SetDefault("reporter.type", ReporterTypeConsole)
 	v.SetDefault("reporter.output_file", "")
 	v.SetDefault("reporter.pretty_print", true)
 }
@@ -255,9 +292,8 @@ func (l *ConfigLoader) UpdateConfig(cfg *Config, cliOpts map[string]interface{})
 		switch key {
 		case "log-level":
 			if logLevel, ok := value.(string); ok && logLevel != "" {
-				cfg.App.LogLevel = logging.LogLevel(strings.ToUpper(logLevel))
-
-				l.logger.SetLogLevel(cfg.App.LogLevel)
+				cfg.SetLogLevel(logging.LogLevel(strings.ToUpper(logLevel)))
+				l.logger.SetLogLevel(cfg.app.logLevel)
 			}
 		case "attributes":
 			if attrs, ok := value.([]string); ok && len(attrs) > 0 {
@@ -273,13 +309,13 @@ func (l *ConfigLoader) UpdateConfig(cfg *Config, cliOpts map[string]interface{})
 			}
 		case "state-file":
 			if stateFile, ok := value.(string); ok && stateFile != "" {
-				cfg.Terraform.StateFile = stateFile
-				cfg.Terraform.UseHCL = false
+				cfg.SetStateFile(stateFile)
+				cfg.SetUseHCL(false)
 			}
 		case "hcl-dir":
 			if hclDir, ok := value.(string); ok && hclDir != "" {
-				cfg.Terraform.HCLDir = hclDir
-				cfg.Terraform.UseHCL = true
+				cfg.SetHCLDir(hclDir)
+				cfg.SetUseHCL(true)
 			}
 		case "output":
 			if reporterType, ok := value.(string); ok && reporterType != "" {
@@ -287,11 +323,11 @@ func (l *ConfigLoader) UpdateConfig(cfg *Config, cliOpts map[string]interface{})
 			}
 		case "output-file":
 			if outputFile, ok := value.(string); ok && outputFile != "" {
-				cfg.Reporter.OutputFile = outputFile
+				cfg.SetOutputFile(outputFile)
 			}
 		case "aws-region":
 			if region, ok := value.(string); ok && region != "" {
-				cfg.AWS.Region = region
+				cfg.SetAWSRegion(region)
 			}
 		case "schedule-expression":
 			if expr, ok := value.(string); ok && expr != "" {
@@ -322,20 +358,56 @@ func (l *ConfigLoader) ReloadConfig() (*Config, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if err := l.viper.ReadInConfig(); err != nil {
-		return nil, errors.NewSystemError(fmt.Sprintf("Failed to reload configuration: %v", err), err)
+	if err := l.loadFromFile(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, errors.NewSystemError("Failed to load configuration from file", err)
+		}
+		l.logger.Warn("No configuration file found, will check for .envrc and environment variables")
 	}
 
-	// Also reload from .envrc if it exists
-	_ = l.loadFromEnvrcFile() // Ignore errors as it's optional
+	// Try to load from .envrc file if it exists
+	if err := l.loadFromEnvrcFile(); err != nil {
+		l.logger.Warn(fmt.Sprintf("Failed to load configuration from .envrc file: %v", err))
+	}
 
-	if err := l.viper.Unmarshal(l.config); err != nil {
+	// Load from environment variables
+	l.loadFromEnv()
+
+	var raw rawConfig
+	if err := l.viper.Unmarshal(&raw); err != nil {
 		return nil, errors.NewSystemError("Failed to unmarshal configuration", err)
 	}
+	applyRawToConfig(raw, l.config)
 
 	if err := l.config.Validate(); err != nil {
 		return nil, err
 	}
 
 	return l.config, nil
+}
+
+func applyRawToConfig(raw rawConfig, c *Config) {
+	c.SetEnv(raw.App.Env)
+	c.SetLogLevel(logging.LogLevel(strings.ToUpper(raw.App.LogLevel)))
+	c.SetJSONLogs(raw.App.JSONLogs)
+	c.SetScheduleExpression(raw.App.ScheduleExpression)
+
+	c.SetAWSRegion(raw.AWS.Region)
+	c.SetAWSAccessKeyID(raw.AWS.AccessKeyID)
+	c.SetAWSSecretAccessKey(raw.AWS.SecretAccessKey)
+	c.SetAWSProfile(raw.AWS.Profile)
+	c.SetAWSEndpoint(raw.AWS.Endpoint)
+
+	c.SetStateFile(raw.Terraform.StateFile)
+	c.SetHCLDir(raw.Terraform.HCLDir)
+	c.SetUseHCL(raw.Terraform.UseHCL)
+
+	c.SetAttributes(raw.Detector.Attributes)
+	c.SetSourceOfTruth(raw.Detector.SourceOfTruth)
+	c.SetParallelChecks(raw.Detector.ParallelChecks)
+	c.SetTimeout(time.Duration(raw.Detector.TimeoutSeconds) * time.Second)
+
+	c.SetReporterType(raw.Reporter.Type)
+	c.SetOutputFile(raw.Reporter.OutputFile)
+	c.SetPrettyPrint(raw.Reporter.PrettyPrint)
 }
