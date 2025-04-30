@@ -11,7 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/victor-devv/ec2-drift-detector/internal/app"
 	"github.com/victor-devv/ec2-drift-detector/internal/common/errors"
 	"github.com/victor-devv/ec2-drift-detector/internal/common/logging"
 	"github.com/victor-devv/ec2-drift-detector/internal/config"
@@ -22,16 +21,17 @@ import (
 
 // Handler handles CLI commands
 type Handler struct {
-	app          *app.Application
+	app          service.DriftDetectorProvider
 	logger       *logging.Logger
 	configLoader *config.ConfigLoader
 	config       *config.Config
 	errorHandler *errors.ErrorHandler
 	rootCmd      *cobra.Command
+	ctx          context.Context
 }
 
 // NewHandler creates a new CLI handler
-func NewHandler(application *app.Application, configLoader *config.ConfigLoader, cfg *config.Config, logger *logging.Logger) *Handler {
+func NewHandler(ctx context.Context, application service.DriftDetectorProvider, configLoader *config.ConfigLoader, cfg *config.Config, logger *logging.Logger) *Handler {
 	logger = logger.WithField("component", "cli-handler")
 	errorHandler := errors.NewErrorHandler(logger)
 
@@ -41,6 +41,7 @@ func NewHandler(application *app.Application, configLoader *config.ConfigLoader,
 		configLoader: configLoader,
 		config:       cfg,
 		errorHandler: errorHandler,
+		ctx:          ctx,
 	}
 
 	h.initCommands()
@@ -103,19 +104,19 @@ func (h *Handler) addDetectCommand(rootCmd *cobra.Command) {
 		Long:  "Detect drift between AWS EC2 instances and Terraform configurations",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(h.config.Detector.TimeoutSeconds)*time.Second)
+			ctx, cancel := context.WithTimeout(h.ctx, time.Duration(h.config.GetTimeout())*time.Second)
 			defer cancel()
 
 			if len(args) > 0 {
 				// Detect drift for a specific instance
 				instanceID := args[0]
 				h.logger.Info(fmt.Sprintf("Detecting drift for instance %s", instanceID))
-				return h.app.DriftDetector.DetectAndReportDrift(ctx, instanceID, h.config.Detector.Attributes)
+				return h.app.DetectAndReportDrift(ctx, instanceID, h.config.GetAttributes())
 			}
 
 			// Detect drift for all instances
 			h.logger.Info("Detecting drift for all instances")
-			return h.app.DriftDetector.DetectAndReportDriftForAll(ctx, h.config.Detector.Attributes)
+			return h.app.DetectAndReportDriftForAll(ctx, h.config.GetAttributes())
 		},
 	}
 
@@ -132,8 +133,7 @@ func (h *Handler) addServerCommand(rootCmd *cobra.Command) {
 			h.logger.Info("Starting drift detector server")
 
 			// Start the scheduler
-			ctx := context.Background()
-			if err := h.app.DriftDetector.StartScheduler(ctx); err != nil {
+			if err := h.app.StartScheduler(h.ctx); err != nil {
 				return err
 			}
 
@@ -145,7 +145,7 @@ func (h *Handler) addServerCommand(rootCmd *cobra.Command) {
 			<-sigCh
 
 			// Stop the scheduler
-			h.app.DriftDetector.StopScheduler()
+			h.app.StopScheduler()
 			h.logger.Info("Drift detector server stopped")
 
 			return nil
@@ -172,28 +172,29 @@ func (h *Handler) addConfigCommand(rootCmd *cobra.Command) {
 
 			fmt.Println("Current Configuration:")
 			fmt.Println("======================")
-			fmt.Printf("Source of Truth: %s\n", h.config.Detector.SourceOfTruth)
-			fmt.Printf("Attributes: %s\n", strings.Join(h.config.Detector.Attributes, ", "))
-			fmt.Printf("Parallel Checks: %d\n", h.config.Detector.ParallelChecks)
-			fmt.Printf("Timeout: %d seconds\n", h.config.Detector.TimeoutSeconds)
-			fmt.Printf("Reporter Type: %s\n", h.config.Reporter.Type)
+			fmt.Printf("Source of Truth: %s\n", h.config.GetSourceOfTruth())
+			fmt.Printf("Attributes: %s\n", strings.Join(h.config.GetAttributes(), ", "))
+			fmt.Printf("Parallel Checks: %d\n", h.config.GetParallelChecks())
+			fmt.Printf("Timeout: %d seconds\n", h.config.GetTimeout())
+			reporterType := h.config.GetReporterType()
+			fmt.Printf("Reporter Type: %s\n", reporterType)
 
-			if h.config.Reporter.Type == "json" || h.config.Reporter.Type == "both" {
-				fmt.Printf("Output File: %s\n", h.config.Reporter.OutputFile)
-				fmt.Printf("Pretty Print: %v\n", h.config.Reporter.PrettyPrint)
+			if reporterType == "json" || reporterType == "both" {
+				fmt.Printf("Output File: %s\n", h.config.GetOutputFile())
+				fmt.Printf("Pretty Print: %v\n", h.config.GetPrettyPrint())
 			}
 
-			if h.config.App.ScheduleExpression != "" {
-				fmt.Printf("Schedule Expression: %s\n", h.config.App.ScheduleExpression)
+			if cronExpression := h.config.GetScheduleExpression(); cronExpression != "" {
+				fmt.Printf("Schedule Expression: %s\n", cronExpression)
 			}
 
-			fmt.Printf("Log Level: %s\n", h.config.App.LogLevel)
-			fmt.Printf("AWS Region: %s\n", h.config.AWS.Region)
+			fmt.Printf("Log Level: %s\n", h.config.GetLogLevel())
+			fmt.Printf("AWS Region: %s\n", h.config.GetAWSRegion())
 
-			if h.config.Terraform.UseHCL {
-				fmt.Printf("Terraform HCL Directory: %s\n", h.config.Terraform.HCLDir)
+			if h.config.GetUseHCL() {
+				fmt.Printf("Terraform HCL Directory: %s\n", h.config.GetHCLDir())
 			} else {
-				fmt.Printf("Terraform State File: %s\n", h.config.Terraform.StateFile)
+				fmt.Printf("Terraform State File: %s\n", h.config.GetStateFile())
 			}
 
 			return nil
@@ -232,28 +233,28 @@ func (h *Handler) addConfigCommand(rootCmd *cobra.Command) {
 // updateServiceConfig updates service configuration from the config object
 func (h *Handler) updateServiceConfig() {
 	// Update drift detector configuration
-	detector := h.app.DriftDetector
+	detector := h.app
 
-	sourceOfTruth := model.ResourceOrigin(h.config.Detector.SourceOfTruth)
+	sourceOfTruth := model.ResourceOrigin(h.config.GetSourceOfTruth())
 	detector.SetSourceOfTruth(sourceOfTruth)
-	detector.SetAttributePaths(h.config.Detector.Attributes)
-	detector.SetParallelChecks(h.config.Detector.ParallelChecks)
-	detector.SetTimeout(time.Duration(h.config.Detector.TimeoutSeconds) * time.Second)
-	detector.SetScheduleExpression(h.config.App.ScheduleExpression)
+	detector.SetAttributePaths(h.config.GetAttributes())
+	detector.SetParallelChecks(h.config.GetParallelChecks())
+	detector.SetTimeout(time.Duration(h.config.GetTimeout()) * time.Second)
+	detector.SetScheduleExpression(h.config.GetScheduleExpression())
 
 	// Update reporters based on configuration
 	var reporters []service.Reporter
 
-	switch h.config.Reporter.Type {
+	switch h.config.GetReporterType() {
 	case "console":
 		reporters = append(reporters, reporter.NewConsoleReporter(h.logger))
 	case "json":
-		reporters = append(reporters, reporter.NewJSONReporter(h.logger, h.config.Reporter.OutputFile))
+		reporters = append(reporters, reporter.NewJSONReporter(h.logger, h.config.GetOutputFile()))
 	case "both":
 		reporters = append(reporters, reporter.NewConsoleReporter(h.logger))
-		reporters = append(reporters, reporter.NewJSONReporter(h.logger, h.config.Reporter.OutputFile))
+		reporters = append(reporters, reporter.NewJSONReporter(h.logger, h.config.GetOutputFile()))
 	default:
-		h.logger.Warn("Unknown reporter type: %s, using console reporter", h.config.Reporter.Type)
+		h.logger.Warn("Unknown reporter type: %s, using console reporter", h.config.GetReporterType())
 		reporters = append(reporters, reporter.NewConsoleReporter(h.logger))
 	}
 
@@ -261,8 +262,21 @@ func (h *Handler) updateServiceConfig() {
 }
 
 // Execute executes the root command
-func (h *Handler) Execute() error {
-	return h.rootCmd.Execute()
+func (h *Handler) Execute(ctx context.Context) error {
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		h.rootCmd.Execute()
+	}()
+
+	select {
+	case <-ctx.Done():
+		h.logger.Warn("Received interrupt signal, exiting...")
+		return ctx.Err()
+	case <-done:
+		return nil
+	}
 }
 
 // GetRootCommand returns the root command
