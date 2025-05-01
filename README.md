@@ -93,6 +93,18 @@ To run as a server with scheduled checks:
 ./drift-detector server
 ```
 
+To view current configuration:
+
+```bash
+./drift-detector config show
+```
+
+To reload configuration:
+
+```bash
+./drift-detector config reload
+```
+
 ## Configuration
 
 The application can be configured through:
