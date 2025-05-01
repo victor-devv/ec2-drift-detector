@@ -110,12 +110,9 @@ make run
 make test
 ```
 
+View test coverage report
 ```bash
-make cover-summary
-```
-
-```bash
-make cover-html
+make test-report
 ```
 
 ### Running Raw Commands
