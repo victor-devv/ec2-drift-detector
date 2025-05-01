@@ -104,13 +104,8 @@ make run-binary
 make run
 ```
 
-### 🧪 Run Tests
+### 🧪 Run Tests and view report
 
-```bash
-make test
-```
-
-View test coverage report
 ```bash
 make test-report
 ```
