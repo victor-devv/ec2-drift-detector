@@ -1,0 +1,33 @@
+app:
+  env: development
+  log_level: INFO
+  json_logs: false
+  schedule_expression: "0 */6 * * *"
+
+aws:
+  endpoint: http://localhost:4566
+  region: eu-north-1
+  access_key_id: dummy
+  secret_access_key: dummy
+  # profile: default
+
+terraform:
+  state_file: terraform/terraform.tfstate
+  # Alternatively, use HCL files:
+  # hcl_dir: terraform/
+  # use_hcl: true
+
+detector:
+  source_of_truth: terraform
+  attributes:
+    - instance_type
+    - ami
+    - vpc_security_group_ids
+    - tags
+  parallel_checks: 5
+  timeout_seconds: 60
+
+reporter:
+  type: both  # console, json, or both
+  output_file: drift-report.json
+  pretty_print: true

@@ -13,6 +13,12 @@ The EC2 Drift Detector identifies mismatches between the actual state of EC2 ins
 - CI/CD integrity checks
 - Compliance verification
 
+The application can be configured through:
+
+1. Configuration files (YAML)
+2. Environment variables via .env or .envrc
+3. Command-line flags
+
 ---
 
 ## 🚀 Features
@@ -32,34 +38,67 @@ The EC2 Drift Detector identifies mismatches between the actual state of EC2 ins
 
 - [Go 1.24+](https://golang.org/dl/)
 - [Docker](https://www.docker.com/)
+- [Docker Compose](https://docs.docker.com/compose/)
 - [Terraform](https://developer.hashicorp.com/terraform/downloads)
 - [Direnv](https://direnv.net/)
 
 ### 🔧 Build from source
 
+Clone the repository
 ```bash
-git clone https://github.com/victor-devv/ec2-drift-detector.git
-cd ec2-drift-detector
-cp .envrc.example .envrc
-direnv allow
+git clone https://github.com/victor-devv/ec2-drift-detector.git && cd ec2-drift-detector
+```
+
+Build the binary
+```bash
 make build
 ```
 
-🐳 Start LocalStack (mock AWS)
+### ⚙️ Fill configuration values
 
+#### Configuration file
+
+Create config.yaml from sample config file
 ```bash
-make localstack-up
-make tf-init
-make tf-apply
+cp config.yaml.example config.yaml
 ```
 
-🧪 Run Drift Detection (built binary)
+#### Environment Variables (.envrc or .env)
+
+Create .envrc from sample .envrc file (no need for exports if using .env)
+```bash
+cp .envrc.example .envrc
+```
+
+Load variables into shell (if using .envrc)
+```bash
+direnv allow
+```
+
+### 🐳 Start LocalStack
+
+Start Localstack docker container
+```bash
+make localstack-up
+```
+
+### 🐳 Create AWS resources
+
+Run terraform init, plan and apply
+
+```bash
+make tf-init && make tf-plan && make tf-apply
+```
+
+### 🧪 Run Drift Detection 
+
+#### Built binary
 
 ```bash
 make run-binary
 ```
 
-Or using go run
+#### Or using go run
 
 ```bash
 make run
@@ -69,11 +108,17 @@ make run
 
 ```bash
 make test
+```
+
+```bash
 make cover-summary
+```
+
+```bash
 make cover-html
 ```
 
-### Running the Application
+### Running Raw Commands
 
 To check for drift in all instances:
 
@@ -105,192 +150,237 @@ To reload configuration:
 ./drift-detector config reload
 ```
 
-## Configuration
-
-The application can be configured through:
-
-1. Configuration files (YAML)
-2. Environment variables via .env or .envrc
-3. Command-line flags
-
-### Samply config.yaml
-
-```yaml
-app:
-  log_level: INFO
-  json_logs: false
-  schedule_expression: "0 */6 * * *"
-
-aws:
-  region: us-west-2
-  profile: default
-  use_localstack: false
-
-terraform:
-  state_file: terraform.tfstate
-  # Alternatively, use HCL files:
-  # hcl_dir: terraform/
-  # use_hcl: true
-
-drift_detection:
-  source_of_truth: terraform
-  attributes:
-    - instance_type
-    - ami
-    - vpc_security_group_ids
-    - tags
-  parallel_checks: 5
-  timeout_seconds: 60
-
-reporter:
-  type: both  # console, json, or both
-  output_file: drift-report.json
-  pretty_print: true
-```
-### Environment Variables
-
-Environment variables are prefixed with `DRIFT_` and use underscores:
-
-```bash
-export DRIFT_APP_LOG_LEVEL=DEBUG
-export DRIFT_AWS_REGION=us-west-2
-export DRIFT_AWS_USE_LOCALSTACK=true
-export DRIFT_TERRAFORM_STATE_FILE=terraform.tfstate
-export DRIFT_DRIFT_DETECTION_SOURCE_OF_TRUTH=terraform
-```
-
-### Command-Line Flags
-
-```bash
-./drift-detector detect --state-file=terraform.tfstate
-
 ---
 
-### 🧭 CLI Usage Examples
+## 🧭 CLI Usage & Examples
 
+### ⚙️ Command-line flags for detect command
+
+| Flag                | Type      | Default     | Description                                      |
+|----------------     |-----------|------------ |--------------------------------------------------|
+| `--state-file`      | string    | -           | Path to Terraform .tfstate                       |
+| `--hcl-dir`         | string    | -           | Path to Terraform HCL directory                  |
+| `--attributes`      | string    | -           | Comma-separated attributes to check              |
+| `--output`          | string    | `console`   | Output format (`console`, `json`, `both`)        |
+| `--output-file`     | string    | -           | File to save report (if JSON)                    |
+| `--parallel-checks` | number    | 0           | No of concurrent checks                          |
+| `--log-level`       | string    | `INFO`      | Determines the max log level                     |
+| `--source-of-truth` | string    | `terraform` | AWS or Terraform                                 |
+
+
+### Examples
 **Non-Drifted**
 
+JSON output to stdout
 ```bash
-$ go run cmd/drift-detector/main.go \
-  --state-file=terraform.tfstate \
-  --attributes=instance_type,tags,ami \
-  --output=json \
-  --output-file=drift-report.json \
-  --verbose
+$ go run cmd/drift-detector/main.go detect --state-file=terraform/terraform.tfstate --attributes=instance_type,tags,vpc_security_group_ids --output=json
 
-INFO[0000] Starting drift detection
-INFO[0000] Terraform path: terraform.tfstate
-INFO[0000] Attributes to check: [instance_type tags ami]
-INFO[0000] Output format: json
-INFO[0000] Running concurrent drift detection
-INFO[0000] Concurrent drift detection complete: 1 instance(s) compared 
+2025-05-01T10:43:19.113+0100 [WARN]  drift-detector: No configuration file found, will check for .envrc and environment variables
+2025-05-01T10:43:19.113+0100 [INFO]  drift-detector: Loading configuration from .envrc file: /Users/bigvic/github.com/victor-devv/ec2-drift-detector/.envrc
+2025-05-01T10:43:19.114+0100 [INFO]  drift-detector: Configuration loaded successfully
+2025-05-01T10:43:19.114+0100 [INFO]  drift-detector: Creating in-memory drift repository
+2025-05-01T10:43:19.114+0100 [INFO]  drift-detector: Reporters created successfully
+2025-05-01T10:43:19.114+0100 [INFO]  drift-detector: Using LocalStack endpoint: http://localhost:4566: component=aws-client
+2025-05-01T10:43:19.150+0100 [INFO]  drift-detector: AWS client initialized successfully: component=aws-client
+2025-05-01T10:43:19.150+0100 [INFO]  drift-detector: AWS provider initialized
+2025-05-01T10:43:19.150+0100 [INFO]  drift-detector: Terraform provider initialized
+2025-05-01T10:43:19.150+0100 [INFO]  drift-detector: Creating drift detector with source of truth: terraform
+2025-05-01T10:43:19.150+0100 [INFO]  drift-detector: Drift detector created successfully
+2025-05-01T10:43:19.150+0100 [INFO]  drift-detector: Updating reporters: component=drift-detector
+2025-05-01T10:43:19.150+0100 [INFO]  drift-detector: Detecting drift for all instances: component=cli-handler
+2025-05-01T10:43:19.150+0100 [INFO]  drift-detector: Detecting and reporting drift for all instances: component=drift-detector
+2025-05-01T10:43:19.150+0100 [INFO]  drift-detector: Detecting drift for all instances: component=drift-detector
+2025-05-01T10:43:19.151+0100 [INFO]  drift-detector: Listing instances from Terraform: component=terraform-client
+2025-05-01T10:43:19.151+0100 [INFO]  drift-detector: Parsing Terraform state file: terraform/terraform.tfstate: component=terraform-state
+2025-05-01T10:43:19.151+0100 [INFO]  drift-detector: Listing all EC2 instances: component=aws-ec2
+2025-05-01T10:43:19.151+0100 [INFO]  drift-detector: Successfully parsed Terraform state file with 5 resources: component=terraform-state
+2025-05-01T10:43:19.151+0100 [INFO]  drift-detector: Extracting EC2 instances from Terraform state: component=terraform-state
+2025-05-01T10:43:19.151+0100 [INFO]  drift-detector: Found 2 EC2 instances in Terraform state: component=terraform-state
+2025-05-01T10:43:19.169+0100 [INFO]  drift-detector: Found 2 EC2 instances: component=aws-ec2
+2025-05-01T10:43:19.169+0100 [INFO]  drift-detector: Detecting drift for instance i-471adec4374c632bf: component=drift-detector
+2025-05-01T10:43:19.169+0100 [INFO]  drift-detector: Detecting drift for instance i-c9b8969cbf6dc304d: component=drift-detector
+2025-05-01T10:43:19.169+0100 [INFO]  drift-detector: Reporting drift for 2 instances: component=drift-detector
+2025-05-01T10:43:19.169+0100 [INFO]  drift-detector: Reporting drift for 2 instances to JSON file: component=json-reporter
 {
-  "summary": {
-    "totalResources": 1,
-    "driftedResources": 0,
-    "nonDriftedResources": 1
-  },
+  "timestamp": "2025-05-01T10:43:19.169499+01:00",
+  "total_instances": 2,
+  "drifted_count": 0,
   "results": [
     {
-      "resourceId": "i-3710997b49f48cdc3",
-      "resourceType": "aws_instance",
-      "inTerraform": true,
-      "inAWS": true,
-      "drifted": false,
-      "attribute_diffs": []
+      "id": "2005a649-4ec4-4eac-b8da-37578822967b",
+      "resource_id": "i-c9b8969cbf6dc304d",
+      "resource_type": "aws_instance",
+      "source_type": "terraform",
+      "timestamp": "2025-05-01T10:43:19.169273+01:00",
+      "has_drift": false
+    },
+    {
+      "id": "fda5edf1-93b5-4dc5-8ab9-08219894f79f",
+      "resource_id": "i-471adec4374c632bf",
+      "resource_type": "aws_instance",
+      "source_type": "terraform",
+      "timestamp": "2025-05-01T10:43:19.169262+01:00",
+      "has_drift": false
     }
   ]
 }
-INFO[0000] Drift detection completed
+2025-05-01T10:43:19.169+0100 [INFO]  drift-detector: Successfully written report to stdout: component=json-reporter
 ```
 
+Console output
 ```bash
-$ go run cmd/drift-detector/main.go \
-  --state-file=terraform.tfstate \
-  --attributes=instance_type,tags,ami \
-  --output=console \
-  --verbose
+$ go run cmd/drift-detector/main.go detect --state-file=terraform/terraform.tfstate --attributes=instance_type,tags,vpc_security_group_ids --output=console --output-file=drift_report.json
 
-INFO[0000] Starting drift detection                     
-INFO[0000] Terraform path: terraform/terraform.tfstate  
-INFO[0000] Attributes to check: [instance_type tags vpc_security_group_ids] 
-INFO[0000] Output format: console                       
-INFO[0000] Running concurrent drift detection           
-INFO[0000] Concurrent drift detection complete: 1 instance(s) compared 
-✓ No drift detected across 1 resource(s)
+2025-05-01T10:21:03.307+0100 [WARN]  drift-detector: No configuration file found, will check for .envrc and environment variables
+2025-05-01T10:21:03.307+0100 [INFO]  drift-detector: Loading configuration from .envrc file: /Users/bigvic/github.com/victor-devv/ec2-drift-detector/.envrc
+2025-05-01T10:21:03.309+0100 [INFO]  drift-detector: Configuration loaded successfully
+2025-05-01T10:21:03.309+0100 [INFO]  drift-detector: Creating in-memory drift repository
+2025-05-01T10:21:03.309+0100 [INFO]  drift-detector: Reporters created successfully
+2025-05-01T10:21:03.309+0100 [INFO]  drift-detector: Using LocalStack endpoint: http://localhost:4566: component=aws-client
+2025-05-01T10:21:03.349+0100 [INFO]  drift-detector: AWS client initialized successfully: component=aws-client
+2025-05-01T10:21:03.349+0100 [INFO]  drift-detector: AWS provider initialized
+2025-05-01T10:21:03.349+0100 [INFO]  drift-detector: Terraform provider initialized
+2025-05-01T10:21:03.349+0100 [INFO]  drift-detector: Creating drift detector with source of truth: terraform
+2025-05-01T10:21:03.349+0100 [INFO]  drift-detector: Drift detector created successfully
+2025-05-01T10:21:03.349+0100 [INFO]  drift-detector: Updating reporters: component=drift-detector
+2025-05-01T10:21:03.349+0100 [INFO]  drift-detector: Detecting drift for all instances: component=cli-handler
+2025-05-01T10:21:03.349+0100 [INFO]  drift-detector: Detecting and reporting drift for all instances: component=drift-detector
+2025-05-01T10:21:03.349+0100 [INFO]  drift-detector: Detecting drift for all instances: component=drift-detector
+2025-05-01T10:21:03.349+0100 [INFO]  drift-detector: Listing instances from Terraform: component=terraform-client
+2025-05-01T10:21:03.349+0100 [INFO]  drift-detector: Listing all EC2 instances: component=aws-ec2
+2025-05-01T10:21:03.349+0100 [INFO]  drift-detector: Parsing Terraform state file: terraform/terraform.tfstate: component=terraform-state
+2025-05-01T10:21:03.351+0100 [INFO]  drift-detector: Successfully parsed Terraform state file with 5 resources: component=terraform-state
+2025-05-01T10:21:03.351+0100 [INFO]  drift-detector: Extracting EC2 instances from Terraform state: component=terraform-state
+2025-05-01T10:21:03.351+0100 [INFO]  drift-detector: Found 2 EC2 instances in Terraform state: component=terraform-state
+2025-05-01T10:21:03.361+0100 [INFO]  drift-detector: Found 2 EC2 instances: component=aws-ec2
+2025-05-01T10:21:03.361+0100 [INFO]  drift-detector: Detecting drift for instance i-c9b8969cbf6dc304d: component=drift-detector
+2025-05-01T10:21:03.361+0100 [INFO]  drift-detector: Detecting drift for instance i-471adec4374c632bf: component=drift-detector
+2025-05-01T10:21:03.361+0100 [INFO]  drift-detector: Reporting drift for 2 instances: component=drift-detector
+&{0x1400021d0e0 true}
+2025-05-01T10:21:03.361+0100 [INFO]  drift-detector: Reporting drift for 2 instances: component=console-reporter
+=== Drift Detection Summary ===
 
-RESOURCE ID          TYPE          STATUS   DETAILS
-----------           ----          ------   -------
-i-3710997b49f48cdc3  aws_instance  OK  -
-INFO[0000] Drift detection completed  
+Number of Instances: 2
+Instances with Drift: No (0/2)
+
+No drift detected in any instance.
 ```
 
 **Drifted**
 
+Console Output
 ```bash
-$ go run cmd/drift-detector/main.go \
-  --state-file=terraform.tfstate \
-  --attributes=instance_type,tags,ami \
-  --output=console \
-  --verbose
-  
-INFO[0000] Starting drift detection                     
-INFO[0000] Terraform path: terraform/terraform.tfstate  
-INFO[0000] Attributes to check: [instance_type tags vpc_security_group_ids] 
-INFO[0000] Output format: console                       
-INFO[0000] Running concurrent drift detection           
-INFO[0000] Concurrent drift detection complete: 1 instance(s) compared 
-✗ Drift detected in 1 out of 1 resource(s)
+$ go run cmd/drift-detector/main.go detect --state-file=terraform/terraform.tfstate --attributes=instance_type,tags,vpc_security_group_ids --output=console --output-file=drift_report.json
 
-RESOURCE ID          TYPE          STATUS        DETAILS
-----------           ----          ------        -------
-i-3710997b49f48cdc3  aws_instance  DRIFTED  instance_type: AWS='t3.micro', TF='t2.micro'
-INFO[0000] Drift detection completed    
+2025-05-01T10:24:28.805+0100 [WARN]  drift-detector: No configuration file found, will check for .envrc and environment variables
+2025-05-01T10:24:28.805+0100 [INFO]  drift-detector: Loading configuration from .envrc file: /Users/bigvic/github.com/victor-devv/ec2-drift-detector/.envrc
+2025-05-01T10:24:28.806+0100 [INFO]  drift-detector: Configuration loaded successfully
+2025-05-01T10:24:28.806+0100 [INFO]  drift-detector: Creating in-memory drift repository
+2025-05-01T10:24:28.806+0100 [INFO]  drift-detector: Reporters created successfully
+2025-05-01T10:24:28.806+0100 [INFO]  drift-detector: Using LocalStack endpoint: http://localhost:4566: component=aws-client
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: AWS client initialized successfully: component=aws-client
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: AWS provider initialized
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: Terraform provider initialized
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: Creating drift detector with source of truth: terraform
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: Drift detector created successfully
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: Updating reporters: component=drift-detector
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: Detecting drift for all instances: component=cli-handler
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: Detecting and reporting drift for all instances: component=drift-detector
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: Detecting drift for all instances: component=drift-detector
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: Listing instances from Terraform: component=terraform-client
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: Listing all EC2 instances: component=aws-ec2
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: Parsing Terraform state file: terraform/terraform.tfstate: component=terraform-state
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: Successfully parsed Terraform state file with 5 resources: component=terraform-state
+2025-05-01T10:24:28.852+0100 [INFO]  drift-detector: Extracting EC2 instances from Terraform state: component=terraform-state
+2025-05-01T10:24:28.853+0100 [INFO]  drift-detector: Found 2 EC2 instances in Terraform state: component=terraform-state
+2025-05-01T10:24:28.869+0100 [INFO]  drift-detector: Found 2 EC2 instances: component=aws-ec2
+2025-05-01T10:24:28.869+0100 [INFO]  drift-detector: Detecting drift for instance i-471adec4374c632bf: component=drift-detector
+2025-05-01T10:24:28.869+0100 [INFO]  drift-detector: Detecting drift for instance i-c9b8969cbf6dc304d: component=drift-detector
+2025-05-01T10:24:28.869+0100 [INFO]  drift-detector: Detected 1 drifted attributes for instance i-c9b8969cbf6dc304d: component=drift-detector
+2025-05-01T10:24:28.869+0100 [INFO]  drift-detector: Reporting drift for 2 instances: component=drift-detector
+2025-05-01T10:24:28.869+0100 [INFO]  drift-detector: Reporting drift for 2 instances: component=console-reporter
+=== Drift Detection Summary ===
+
+Number of Instances: 2
+Instances with Drift: Yes (1/2)
+
+=== Instances with Drift ===
+
+Instance ID          Drifted Attributes  Timestamp
+-----------          ------------------  ---------
+i-c9b8969cbf6dc304d  instance_type       2025-05-01T10:24:28+01:00
+
+Use 'drift-detector show <instance-id>' to see detailed drift information for a specific instance.   
 ```
 
+JSON output to stdout
 ```bash
-$ go run cmd/drift-detector/main.go \
-  --state-file=terraform.tfstate \
-  --attributes=instance_type,tags,ami \
-  --output=console \
-  --verbose
+$ go run cmd/drift-detector/main.go detect --state-file=terraform/terraform.tfstate --attributes=instance_type,tags,vpc_security_group_ids --output=json
 
-INFO[0000] Starting drift detection                     
-INFO[0000] Terraform path: terraform/terraform.tfstate  
-INFO[0000] Attributes to check: [instance_type tags vpc_security_group_ids] 
-INFO[0000] Output format: json                          
-INFO[0000] Running concurrent drift detection           
-INFO[0000] Concurrent drift detection complete: 1 instance(s) compared 
+2025-05-01T10:41:50.582+0100 [WARN]  drift-detector: No configuration file found, will check for .envrc and environment variables
+2025-05-01T10:41:50.582+0100 [INFO]  drift-detector: Loading configuration from .envrc file: /Users/bigvic/github.com/victor-devv/ec2-drift-detector/.envrc
+2025-05-01T10:41:50.583+0100 [INFO]  drift-detector: Configuration loaded successfully
+2025-05-01T10:41:50.583+0100 [INFO]  drift-detector: Creating in-memory drift repository
+2025-05-01T10:41:50.583+0100 [INFO]  drift-detector: Reporters created successfully
+2025-05-01T10:41:50.583+0100 [INFO]  drift-detector: Using LocalStack endpoint: http://localhost:4566: component=aws-client
+2025-05-01T10:41:50.602+0100 [INFO]  drift-detector: AWS client initialized successfully: component=aws-client
+2025-05-01T10:41:50.602+0100 [INFO]  drift-detector: AWS provider initialized
+2025-05-01T10:41:50.602+0100 [INFO]  drift-detector: Terraform provider initialized
+2025-05-01T10:41:50.602+0100 [INFO]  drift-detector: Creating drift detector with source of truth: terraform
+2025-05-01T10:41:50.602+0100 [INFO]  drift-detector: Drift detector created successfully
+2025-05-01T10:41:50.602+0100 [INFO]  drift-detector: Updating reporters: component=drift-detector
+2025-05-01T10:41:50.602+0100 [INFO]  drift-detector: Detecting drift for all instances: component=cli-handler
+2025-05-01T10:41:50.602+0100 [INFO]  drift-detector: Detecting and reporting drift for all instances: component=drift-detector
+2025-05-01T10:41:50.602+0100 [INFO]  drift-detector: Detecting drift for all instances: component=drift-detector
+2025-05-01T10:41:50.603+0100 [INFO]  drift-detector: Listing instances from Terraform: component=terraform-client
+2025-05-01T10:41:50.603+0100 [INFO]  drift-detector: Parsing Terraform state file: terraform/terraform.tfstate: component=terraform-state
+2025-05-01T10:41:50.603+0100 [INFO]  drift-detector: Listing all EC2 instances: component=aws-ec2
+2025-05-01T10:41:50.603+0100 [INFO]  drift-detector: Successfully parsed Terraform state file with 5 resources: component=terraform-state
+2025-05-01T10:41:50.603+0100 [INFO]  drift-detector: Extracting EC2 instances from Terraform state: component=terraform-state
+2025-05-01T10:41:50.603+0100 [INFO]  drift-detector: Found 2 EC2 instances in Terraform state: component=terraform-state
+2025-05-01T10:41:50.613+0100 [INFO]  drift-detector: Found 2 EC2 instances: component=aws-ec2
+2025-05-01T10:41:50.613+0100 [INFO]  drift-detector: Detecting drift for instance i-471adec4374c632bf: component=drift-detector
+2025-05-01T10:41:50.613+0100 [INFO]  drift-detector: Detecting drift for instance i-c9b8969cbf6dc304d: component=drift-detector
+2025-05-01T10:41:50.613+0100 [INFO]  drift-detector: Detected 1 drifted attributes for instance i-c9b8969cbf6dc304d: component=drift-detector
+2025-05-01T10:41:50.613+0100 [INFO]  drift-detector: Reporting drift for 2 instances: component=drift-detector
+2025-05-01T10:41:50.614+0100 [INFO]  drift-detector: Reporting drift for 2 instances to JSON file: component=json-reporter
 {
-  "summary": {
-    "totalResources": 1,
-    "driftedResources": 1,
-    "nonDriftedResources": 0
-  },
+  "timestamp": "2025-05-01T10:41:50.614026+01:00",
+  "total_instances": 2,
+  "drifted_count": 1,
   "results": [
     {
-      "resourceId": "i-3710997b49f48cdc3",
-      "resourceType": "aws_instance",
-      "inTerraform": true,
-      "inAWS": true,
-      "drifted": true,
-      "attribute_diffs": [
-        {
-          "attribute_name": "instance_type",
-          "aws_value": "t3.micro",
-          "terraform_value": "t2.micro",
-          "is_complex": false
+      "id": "a099518c-07b0-4bb2-9b75-cca232157d01",
+      "resource_id": "i-c9b8969cbf6dc304d",
+      "resource_type": "aws_instance",
+      "source_type": "terraform",
+      "timestamp": "2025-05-01T10:41:50.613743+01:00",
+      "has_drift": true,
+      "drifted_attributes": {
+        "instance_type": {
+          "path": "instance_type",
+          "source_value": "t2.micro",
+          "target_value": "t3.micro",
+          "changed": true
         }
-      ]
+      }
+    },
+    {
+      "id": "848a1f72-53e7-449b-a727-c6e2d0094f50",
+      "resource_id": "i-471adec4374c632bf",
+      "resource_type": "aws_instance",
+      "source_type": "terraform",
+      "timestamp": "2025-05-01T10:41:50.61373+01:00",
+      "has_drift": false
     }
   ]
 }
-INFO[0000] Drift detection completed  
+2025-05-01T10:41:50.614+0100 [INFO]  drift-detector: Successfully written report to stdout: component=json-reporter 
 ```
 
 ---
 
-## 🧾 Sample AWS EC2 Response (JSON)
+### 🧾 Sample AWS EC2 Response (JSON)
 
 This is an example of how an EC2 instance might look in the internal model after being fetched from AWS and serialized as JSON:
 
@@ -323,21 +413,6 @@ This is an example of how an EC2 instance might look in the internal model after
 
 ---
 
-### ⚙️ Configuration
-
-**Set via CLI flags or environment variables**:
-
-| Flag           | Type      | Default    | Description                                      |
-|----------------|-----------|------------|--------------------------------------------------|
-| `--state-file` | string    | -          | Path to Terraform .tfstate                       |
-| `--attributes` | string    | -          | Comma-separated attributes to check              |
-| `--output`     | string    | `console`  | Output format (`console`, `json`)                |
-| `--output-file`| string    | -          | File to save report (if JSON)                    |
-| `--concurrent` | bool      | `false`    | Run checks concurrently                          |
-| `--verbose`    | bool      | `false`    | Enable debug logs                                |
-
----
-
 ## 🧱 Design & Architecture
 
 The application follows Domain-Driven Design principles:
@@ -356,11 +431,15 @@ terraform-drift-detector/
 │   ├── app/                # Application services
 │   ├── common/             # Common utilities
 │   ├── config/             # Configuration
+│   ├── container/          # DI Container
 │   ├── domain/             # Domain models and services
+│   ├── factory/            # App component initialization
 │   ├── infrastructure/     # External dependencies
 │   └── presentation/       # User interfaces
 ├── pkg/                    # Public packages
-├── test/                   # Tests and fixtures
+├── terraform/              # Terraform manifests for mock AWS resources
+├── config.yaml.example     # Sample yaml configuration
+├── .envrc.example          # Sample .envrc configuration
 ├── docker-compose.yml      # Docker Compose configuration
 ├── Dockerfile              # Docker build file
 ├── go.mod                  # Go modules
