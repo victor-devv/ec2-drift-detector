@@ -32,7 +32,7 @@ type JSONReport struct {
 func NewJSONReporter(logger *logging.Logger, outputFile string) *JSONReporter {
 	return &JSONReporter{
 		logger:      logger.WithField("component", "json-reporter"),
-		outputFile:  outputFile,
+		outputFile:  utils.AppendUniqueSuffix(outputFile),
 		prettyPrint: true,
 	}
 }
@@ -97,15 +97,12 @@ func (r *JSONReporter) writeReport(report *JSONReport) error {
 		return errors.NewOperationalError("Failed to marshal report to JSON", err)
 	}
 
-	path := r.outputFile
-	path = utils.AppendUniqueSuffix(path)
-
 	// Write the report to the output file
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(r.outputFile, data, 0644); err != nil {
 		return errors.NewOperationalError(fmt.Sprintf("Failed to write report to %s", r.outputFile), err)
 	}
 
-	r.logger.Info(fmt.Sprintf("Successfully wrote report to %s", r.outputFile))
+	r.logger.Info(fmt.Sprintf("Successfully written report to %s", r.outputFile))
 	return nil
 }
 
