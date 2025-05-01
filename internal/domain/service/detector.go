@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/victor-devv/ec2-drift-detector/internal/domain/model"
 )
@@ -61,4 +62,55 @@ type DriftService interface {
 
 	// RunScheduledDriftCheck runs a scheduled drift check
 	RunScheduledDriftCheck(ctx context.Context) error
+}
+
+// DriftDetectorProvider defines the interface for a drift detector service
+type DriftDetectorProvider interface {
+	// DetectDrift detects drift between two instances for specified attributes
+	DetectDrift(ctx context.Context, source, target *model.Instance, attributePaths []string) (*model.DriftResult, error)
+
+	// DetectDriftByID detects drift for an instance by ID
+	DetectDriftByID(ctx context.Context, instanceID string, attributePaths []string) (*model.DriftResult, error)
+
+	// DetectDriftForAll detects drift for all instances
+	DetectDriftForAll(ctx context.Context, attributePaths []string) ([]*model.DriftResult, error)
+
+	// DetectAndReportDrift detects and reports drift for a single instance
+	DetectAndReportDrift(ctx context.Context, instanceID string, attributePaths []string) error
+
+	// DetectAndReportDriftForAll detects and reports drift for all instances
+	DetectAndReportDriftForAll(ctx context.Context, attributePaths []string) error
+
+	// RunScheduledDriftCheck runs a scheduled drift check
+	RunScheduledDriftCheck(ctx context.Context) error
+
+	// StartScheduler starts the scheduler
+	StartScheduler(ctx context.Context) error
+
+	// StopScheduler stops the scheduler
+	StopScheduler()
+
+	// Configuration setters
+	SetSourceOfTruth(sourceOfTruth model.ResourceOrigin)
+	SetAttributePaths(attributePaths []string)
+	SetParallelChecks(parallelChecks int)
+	SetTimeout(timeout time.Duration)
+	SetScheduleExpression(expression string)
+	SetReporters(reporters []Reporter)
+
+	// Configuration getters
+	GetAttributePaths() []string
+	GetSourceOfTruth() model.ResourceOrigin
+	GetParallelChecks() int
+	GetTimeout() time.Duration
+	GetScheduleExpression() string
+}
+
+// DriftDetectorConfig holds the configuration for drift detector services
+type DriftDetectorConfig struct {
+	SourceOfTruth      model.ResourceOrigin
+	AttributePaths     []string
+	ParallelChecks     int
+	Timeout            time.Duration
+	ScheduleExpression string
 }

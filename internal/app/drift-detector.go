@@ -30,14 +30,8 @@ type DriftDetectorService struct {
 	scheduler          *cron.Cron
 }
 
-// DriftDetectorConfig holds the configuration for the drift detector service
-type DriftDetectorConfig struct {
-	SourceOfTruth      model.ResourceOrigin
-	AttributePaths     []string
-	ParallelChecks     int
-	Timeout            time.Duration
-	ScheduleExpression string
-}
+// Ensure DriftDetectorService implements the service.DriftDetectorProvider interface
+var _ service.DriftDetectorProvider = (*DriftDetectorService)(nil)
 
 // NewDriftDetectorService creates a new drift detector service
 func NewDriftDetectorService(
@@ -45,7 +39,7 @@ func NewDriftDetectorService(
 	terraformProvider service.InstanceProvider,
 	repository service.DriftRepository,
 	reporters []service.Reporter,
-	config DriftDetectorConfig,
+	config service.DriftDetectorConfig,
 	logger *logging.Logger,
 ) *DriftDetectorService {
 	logger = logger.WithField("component", "drift-detector")
