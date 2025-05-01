@@ -326,9 +326,9 @@ func (c *Config) Validate() error {
 		return errors.NewValidationError("Reporter type must be 'json', 'console', or 'both'")
 	}
 
-	if (c.reporter.typeVal == ReporterTypeJSON || c.reporter.typeVal == ReporterTypeBoth) && c.reporter.outputFile == "" {
-		return errors.NewValidationError("Output file must be specified for JSON reporter")
-	}
+	// if (c.reporter.typeVal == ReporterTypeJSON || c.reporter.typeVal == ReporterTypeBoth) && c.reporter.outputFile == "" {
+	// 	return errors.NewValidationError("Output file must be specified for JSON reporter")
+	// }
 
 	if c.app.scheduleExpression != "" && len(c.app.scheduleExpression) < 9 {
 		return errors.NewValidationError("Invalid schedule expression format")

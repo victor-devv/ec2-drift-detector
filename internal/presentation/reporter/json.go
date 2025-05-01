@@ -30,9 +30,12 @@ type JSONReport struct {
 
 // NewJSONReporter creates a new JSON reporter
 func NewJSONReporter(logger *logging.Logger, outputFile string) *JSONReporter {
+	if outputFile != "" {
+		outputFile = utils.AppendUniqueSuffix(outputFile)
+	}
 	return &JSONReporter{
 		logger:      logger.WithField("component", "json-reporter"),
-		outputFile:  utils.AppendUniqueSuffix(outputFile),
+		outputFile:  outputFile,
 		prettyPrint: true,
 	}
 }
@@ -79,10 +82,12 @@ func (r *JSONReporter) ReportMultipleDrifts(results []*model.DriftResult) error 
 
 // writeReport writes a report to the output file
 func (r *JSONReporter) writeReport(report *JSONReport) error {
-	// Create the output directory if it doesn't exist
-	dir := filepath.Dir(r.outputFile)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return errors.NewOperationalError(fmt.Sprintf("Failed to create output directory %s", dir), err)
+	if r.outputFile != "" {
+		// Create the output directory if it doesn't exist
+		dir := filepath.Dir(r.outputFile)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return errors.NewOperationalError(fmt.Sprintf("Failed to create output directory %s", dir), err)
+		}
 	}
 
 	// Encode the report to JSON
@@ -97,9 +102,21 @@ func (r *JSONReporter) writeReport(report *JSONReport) error {
 		return errors.NewOperationalError("Failed to marshal report to JSON", err)
 	}
 
-	// Write the report to the output file
-	if err := os.WriteFile(r.outputFile, data, 0644); err != nil {
-		return errors.NewOperationalError(fmt.Sprintf("Failed to write report to %s", r.outputFile), err)
+	if r.outputFile != "" {
+		// Write the report to the output file
+		if err := os.WriteFile(r.outputFile, data, 0644); err != nil {
+			return errors.NewOperationalError(fmt.Sprintf("Failed to write report to %s", r.outputFile), err)
+		}
+	} else {
+		_, err := os.Stdout.Write(data)
+		if err != nil {
+			return errors.NewOperationalError("Failed to write report to stdout", err)
+		}
+		fmt.Println()
+	}
+
+	if r.outputFile == "" {
+		r.outputFile = "stdout"
 	}
 
 	r.logger.Info(fmt.Sprintf("Successfully written report to %s", r.outputFile))

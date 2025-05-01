@@ -25,15 +25,13 @@ func (f *ReporterFactory) CreateReporters(cfg *config.Config) ([]service.Reporte
 	reporterType := cfg.GetReporterType()
 
 	switch reporterType {
-	case config.ReporterTypeConsole, config.ReporterTypeBoth:
+	case config.ReporterTypeConsole:
 		reporters = append(reporters, reporter.NewConsoleReporter(f.logger))
-	}
-
-	switch reporterType {
-	case config.ReporterTypeJSON, config.ReporterTypeBoth:
-		reporters = append(reporters, reporter.NewJSONReporter(
-			f.logger,
-			cfg.GetOutputFile()))
+	case config.ReporterTypeJSON:
+		reporters = append(reporters, reporter.NewJSONReporter(f.logger, cfg.GetOutputFile()))
+	case config.ReporterTypeBoth:
+		reporters = append(reporters, reporter.NewConsoleReporter(f.logger))
+		reporters = append(reporters, reporter.NewJSONReporter(f.logger, cfg.GetOutputFile()))
 	}
 	f.logger.Info("Reporters created successfully")
 	return reporters, nil
